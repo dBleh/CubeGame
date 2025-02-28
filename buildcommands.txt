@@ -1,0 +1,31 @@
+to build
+
+cd C:\Users\dunca\Desktop\Game
+Remove-Item -Path build -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -Path build -ItemType Directory
+New-Item -Path build/Release -ItemType Directory -Force
+Copy-Item steam_appid.txt build/Release/steam_appid.txt
+cd build
+cmake .. -G "Visual Studio 17 2022" -A x64
+cmake --build . --config Release
+
+to run
+
+cd C:\Users\dunca\Desktop\Game\build\Release
+.\CubeShooter.exe | Out-Host
+
+
+To publish to steam
+
+cd C:\Users\dunca\Desktop\Game\build\Release
+del /Q *  # Delete all files in the release folder
+
+cd C:\Users\dunca\Desktop\Game\build
+cmake --build . --config Release
+
+
+cd C:\Users\dunca\Desktop\Game\build\Release
+xcopy /E /I /Y * C:\Users\dunca\Desktop\sdk\tools\ContentBuilder\content
+
+
+then launch steampipgui and guild vdfs then post.

@@ -1,0 +1,5 @@
+[2025-02-27 13:07:27]: Starting build for depot 2752481, content path is "C:\\Users\\dunca\\Desktop\\sdk\\tools\\ContentBuilder\\content", build flags 0x0
+[2025-02-27 13:07:27]: Building file listing for depot 2752481 ...
+[2025-02-27 13:07:27]: Found 14 files for mapping: C:\Users\dunca\Desktop\sdk\tools\ContentBuilder\content * -> .
+[2025-02-27 13:07:28]: Found 14 files (7 MB) for depot 2752481
+[2025-02-27 13:07:28]: ERROR! Failed to initialize build on server (Access Denied) 
