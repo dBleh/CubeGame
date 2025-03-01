@@ -8,35 +8,13 @@
 #include <iostream>
 #include "../Utils/Config.h"
 #include "../Entities/Bullet.h"
+#include "../Entities/Enemy.h"
 #include "../States/GameState.h"
+#include "../Entities/Player.h"
 
-struct Player {
-    sf::RectangleShape shape;
-    float x, y;
-    float renderedX, renderedY;
-    int health = 100;
-    CSteamID steamID;
-    bool ready = false;
-    bool isAlive = true;
-    int kills = 0;
-    void initialize();
-    bool move(float dt);
-};
 
-struct Enemy {
-    sf::RectangleShape shape;
-    float x, y;
-    float renderedX, renderedY;
-    float velocityX = 0.0f;
-    float velocityY = 0.0f;
-    int health = 50;
-    uint64_t id;
-    float spawnDelay = 1.5f; // New field: delay before moving
 
-    void initialize();
-    bool move(float dt, float targetX, float targetY);
-    void update(float dt);
-};
+
 struct CSteamIDHash {
     std::size_t operator()(const CSteamID& id) const {
         return std::hash<uint64_t>{}(id.ConvertToUint64());
@@ -75,7 +53,6 @@ public:
     void Run();
     void ProcessEvents(sf::Event& event);
     void RenderHUDLayer();
-
     void EnterLobbyCreation();
     void CreateLobby(const std::string& lobbyName);
     void EnterLobbySearch();
@@ -84,8 +61,6 @@ public:
     void JoinLobbyByIndex(int index);
     void ToggleReady();
     void SendPlayerUpdate();
-    void SendGameStateUpdate();
-
     void ResetLobby();
     void ResetGame();
     void ReturnToLobby();
@@ -98,7 +73,7 @@ public:
     sf::View& GetView() { return view; }
     Player& GetLocalPlayer() { return localPlayer; }
     std::unordered_map<CSteamID, Player, CSteamIDHash>& GetPlayers() { return players; }
-    std::unordered_map<uint64_t, Enemy>& GetEnemies() { return enemies; } // Changed to map
+    std::unordered_map<uint64_t, Enemy>& GetEnemies() { return enemies; }
     std::unordered_map<int, Bullet>& GetBullets() { return bullets; }
     int& GetNextBulletId() { return nextBulletId; }
     CSteamID GetLobbyID() const { return lobbyID; }
@@ -111,8 +86,16 @@ public:
     float& GetShootCooldown() { return shootCooldown; }
     std::vector<std::pair<CSteamID, std::string>>& GetLobbyList() { return lobbyList; }
     std::string& GetLobbyNameInput() { return lobbyNameInput; }
-
+    ISteamNetworkingSockets* GetNetworkingSockets() { return m_pNetworkingSockets; }
+    std::unordered_map<CSteamID, HSteamNetConnection, CSteamIDHash>& GetConnections() { return m_connections; }
+    bool IsDebugMode() const { return debugMode; } // Added
+    void SetDebugMode(bool debug) { debugMode = debug; } // Added
+    void ConnectToPlayer(CSteamID player);
+    void AddDebugPlayer(CSteamID id);
+    float GetShoppingTimer() const { return shoppingTimer; } // New
+    void SetShoppingTimer(float t) { shoppingTimer = t; }
 private:
+float shoppingTimer; // New: Tracks shopping phase duration
     HUD hud;
     sf::View view;
     float shootCooldown;
@@ -123,7 +106,7 @@ private:
     CSteamID lobbyID;
     Player localPlayer;
     std::unordered_map<CSteamID, Player, CSteamIDHash> players;
-    std::unordered_map<uint64_t, Enemy> enemies; // Changed from vector to map
+    std::unordered_map<uint64_t, Enemy> enemies;
     std::unordered_map<int, Bullet> bullets;
     bool hasGameBeenPlayed = false;
     int currentLevel = 0;
@@ -131,8 +114,11 @@ private:
     std::vector<std::pair<CSteamID, std::string>> lobbyList;
     std::string lobbyNameInput;
     int nextBulletId = 0;
-
     sf::Font font;
+
+    ISteamNetworkingSockets* m_pNetworkingSockets;
+    std::unordered_map<CSteamID, HSteamNetConnection, CSteamIDHash> m_connections;
+    bool debugMode = false; // Added
 
     CCallResult<CubeGame, LobbyCreated_t> lobbyCreatedCallResult;
     CCallResult<CubeGame, LobbyEnter_t> lobbyEnterCallResult;
@@ -142,11 +128,14 @@ private:
 
     void SetupInitialHUD();
     void ResetViewToDefault();
+    void ProcessNetworkMessages();
+    void ProcessMessage(const std::string& msg, CSteamID sender);
     void OnLobbyCreated(LobbyCreated_t* pResult, bool bIOFailure);
     void OnLobbyEntered(LobbyEnter_t* pResult, bool bIOFailure);
     void OnLobbyListReceived(LobbyMatchList_t* pResult, bool bIOFailure);
     void OnLobbyChatUpdate(LobbyChatUpdate_t* pParam);
     void OnLobbyChatMsg(LobbyChatMsg_t* pParam);
+    STEAM_CALLBACK(CubeGame, OnNetConnectionStatusChanged, SteamNetConnectionStatusChangedCallback_t);
 
     static const char* GAME_ID;
 };

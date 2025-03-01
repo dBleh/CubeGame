@@ -1,14 +1,11 @@
 #include "CubeGame.h"
 #include <iostream>
 
-int main() {
-    std::cout << "[DEBUG] Starting CubeShooter..." << std::endl;
-    
+int main(int argc, char* argv[]) {
     CubeGame game;
-    std::cout << "[DEBUG] Game object created, calling Run()..." << std::endl;
-    
+    if (argc > 1 && std::string(argv[1]) == "--debug") {
+        game.SetDebugMode(true);
+    }
     game.Run();
-    
-    std::cout << "[DEBUG] Game loop exited normally." << std::endl;
     return 0;
 }

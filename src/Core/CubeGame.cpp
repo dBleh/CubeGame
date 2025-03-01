@@ -15,7 +15,7 @@ const char* CubeGame::GAME_ID = "CubeShooter_v1";
 // HUD Implementation
 HUD::HUD(sf::Font& font) : font(font) {}
 
-void HUD::addElement(const std::string& id, const std::string& content, unsigned int size, 
+void HUD::addElement(const std::string& id, const std::string& content, unsigned int size,
                      sf::Vector2f pos, GameState visibleState, RenderMode mode) {
     sf::Text text;
     text.setFont(font);
@@ -47,11 +47,14 @@ void HUD::render(sf::RenderWindow& window, const sf::View& view, GameState curre
 
 // CubeGame Implementation
 CubeGame::CubeGame() : hud(font) {
-    SteamManager::Initialize();
-    window.create(sf::VideoMode(SCREEN_WIDTH, SCREEN_HEIGHT), "Multiplayer Lobby System");
-    if (!window.isOpen()) {
-        std::exit(1);
+    if (!debugMode) {
+        SteamManager::Initialize();
+        m_pNetworkingSockets = SteamNetworkingSockets();
+    } else {
+        std::cout << "[DEBUG] Running in debug mode, Steam not initialized" << std::endl;
     }
+    window.create(sf::VideoMode(SCREEN_WIDTH, SCREEN_HEIGHT), "Multiplayer Lobby System");
+    if (!window.isOpen()) std::exit(1);
     window.setFramerateLimit(60);
 
     if (!font.loadFromFile("Roboto-Regular.ttf")) {
@@ -59,8 +62,10 @@ CubeGame::CubeGame() : hud(font) {
     }
 
     localPlayer.initialize();
-    if (SteamUser() && SteamUser()->BLoggedOn()) {
+    if (!debugMode && SteamUser() && SteamUser()->BLoggedOn()) {
         localPlayer.steamID = SteamUser()->GetSteamID();
+    } else if (debugMode) {
+        localPlayer.steamID = CSteamID(76561198000000000ULL + 1); // Fake SteamID for testing
     }
 
     ResetViewToDefault();
@@ -69,15 +74,24 @@ CubeGame::CubeGame() : hud(font) {
 }
 
 CubeGame::~CubeGame() {
-    if (inLobby) {
-        SteamMatchmaking()->LeaveLobby(lobbyID);
+    for (auto& [steamID, conn] : m_connections) {
+        m_pNetworkingSockets->CloseConnection(conn, 0, nullptr, false);
     }
+    if (inLobby) SteamMatchmaking()->LeaveLobby(lobbyID);
     SteamAPI_Shutdown();
 }
 
 void CubeGame::Run() {
     sf::Clock clock;
     std::unique_ptr<State> state;
+
+    if (inLobby) {
+        int memberCount = SteamMatchmaking()->GetNumLobbyMembers(lobbyID);
+        for (int i = 0; i < memberCount; ++i) {
+            CSteamID member = SteamMatchmaking()->GetLobbyMemberByIndex(lobbyID, i);
+            ConnectToPlayer(member);
+        }
+    }
 
     while (window.isOpen()) {
         SteamAPI_RunCallbacks();
@@ -87,41 +101,35 @@ void CubeGame::Run() {
         sf::Event event;
         while (window.pollEvent(event)) {
             ProcessEvents(event);
-            if (state) {
-                state->ProcessEvent(event);
-            }
+            if (state) state->ProcessEvent(event);
         }
+
+        ProcessNetworkMessages();
 
         switch (currentState) {
             case GameState::MainMenu:
-                if (!state || dynamic_cast<MainMenuState*>(state.get()) == nullptr) {
+                if (!state || !dynamic_cast<MainMenuState*>(state.get()))
                     state = std::make_unique<MainMenuState>(this);
-                }
                 break;
             case GameState::LobbyCreation:
-                if (!state || dynamic_cast<LobbyCreationState*>(state.get()) == nullptr) {
+                if (!state || !dynamic_cast<LobbyCreationState*>(state.get()))
                     state = std::make_unique<LobbyCreationState>(this);
-                }
                 break;
             case GameState::LobbySearch:
-                if (!state || dynamic_cast<LobbySearchState*>(state.get()) == nullptr) {
+                if (!state || !dynamic_cast<LobbySearchState*>(state.get()))
                     state = std::make_unique<LobbySearchState>(this);
-                }
                 break;
             case GameState::Lobby:
-                if (!state || dynamic_cast<LobbyState*>(state.get()) == nullptr) {
+                if (!state || !dynamic_cast<LobbyState*>(state.get()))
                     state = std::make_unique<LobbyState>(this);
-                }
                 break;
             case GameState::Playing:
-                if (!state || dynamic_cast<GameplayState*>(state.get()) == nullptr) {
+                if (!state || !dynamic_cast<GameplayState*>(state.get()))
                     state = std::make_unique<GameplayState>(this);
-                }
                 break;
             case GameState::GameOver:
-                if (!state || dynamic_cast<GameOverState*>(state.get()) == nullptr) {
+                if (!state || !dynamic_cast<GameOverState*>(state.get()))
                     state = std::make_unique<GameOverState>(this);
-                }
                 break;
             case GameState::Spectating:
             case GameState::Leaderboard:
@@ -130,10 +138,7 @@ void CubeGame::Run() {
 
         if (state) {
             state->Update(dt);
-            if (state && this->GetCurrentState() == currentState) state->Render();
-            if (currentState == GameState::Playing && localPlayer.steamID == SteamMatchmaking()->GetLobbyOwner(lobbyID)) {
-                SendGameStateUpdate();
-            }
+            if (state && currentState == GetCurrentState()) state->Render();
         }
     }
     std::cout << "[DEBUG] Game loop exited normally" << std::endl;
@@ -184,7 +189,7 @@ void CubeGame::EnterLobbyCreation() {
 
 void CubeGame::CreateLobby(const std::string& lobbyName) {
     if (inLobby) return;
-    SteamAPICall_t call = SteamMatchmaking()->CreateLobby(k_ELobbyTypePublic, 4);
+    SteamAPICall_t call = SteamMatchmaking()->CreateLobby(k_ELobbyTypePublic, 10);
     lobbyCreatedCallResult.Set(call, this, &CubeGame::OnLobbyCreated);
     lobbyNameInput = lobbyName;
     std::cout << "[DEBUG] Creating Steam lobby with name: " << lobbyName << std::endl;
@@ -237,53 +242,12 @@ void CubeGame::SendPlayerUpdate() {
         p.x = p.y = 0.0f;
         std::cout << "[ERROR] Player position was NaN, reset to (0,0)" << std::endl;
     }
-    int bytes = snprintf(buffer, sizeof(buffer), "P|%llu|%.1f|%.1f|%d|%d|%d", 
-                         p.steamID.ConvertToUint64(), p.x, p.y, p.health, p.kills, p.ready ? 1 : 0);
+    int bytes = snprintf(buffer, sizeof(buffer), "P|%llu|%.1f|%.1f|%d|%d|%d|%.1f|%d",
+                         p.steamID.ConvertToUint64(), p.x, p.y, p.health, p.kills, p.ready ? 1 : 0, p.speed, p.money);
     if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
-        SteamMatchmaking()->SendLobbyChatMsg(lobbyID, buffer, bytes + 1);
-    }
-}
-
-void CubeGame::SendGameStateUpdate() {
-    if (!inLobby || currentState != GameState::Playing) return;
-
-    std::string stateMsg = "G|";
-    for (const auto& [id, p] : players) {
-        float x = std::isnan(p.x) ? 0.0f : p.x;
-        float y = std::isnan(p.y) ? 0.0f : p.y;
-        stateMsg += std::to_string(id.ConvertToUint64()) + "," + 
-                    std::to_string(static_cast<int>(x)) + "," + std::to_string(static_cast<int>(y)) + "," + 
-                    std::to_string(p.health) + "," + std::to_string(p.kills) + "," + 
-                    (p.isAlive ? "1" : "0") + ";";
-    }
-    stateMsg += "|";
-    for (const auto& [id, e] : enemies) {
-        float x = std::isnan(e.x) ? 0.0f : e.x;
-        float y = std::isnan(e.y) ? 0.0f : e.y;
-        stateMsg += std::to_string(id) + "," + std::to_string(static_cast<int>(x)) + "," + 
-                    std::to_string(static_cast<int>(y)) + "," + std::to_string(e.health) + "," +
-                    std::to_string(static_cast<int>(e.spawnDelay * 1000)) + ";";
-    }
-    stateMsg += "|";
-    for (const auto& [id, b] : bullets) {
-        float x = std::isnan(b.x) ? 0.0f : b.x;
-        float y = std::isnan(b.y) ? 0.0f : b.y;
-        float vx = std::isnan(b.velocityX) ? 0.0f : b.velocityX;
-        float vy = std::isnan(b.velocityY) ? 0.0f : b.velocityY;
-        int shooterID = (b.id >> 16) & 0xFFFF;
-        int bulletIdx = b.id & 0xFFFF;
-        stateMsg += std::to_string(shooterID) + "," + std::to_string(bulletIdx) + "," +
-                    std::to_string(static_cast<int>(x)) + "," + std::to_string(static_cast<int>(y)) + "," +
-                    std::to_string(static_cast<int>(vx)) + "," + std::to_string(static_cast<int>(vy)) + ";";
-    }
-
-    char buffer[4096];
-    int bytes = snprintf(buffer, sizeof(buffer), "%s", stateMsg.c_str());
-    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
-        SteamMatchmaking()->SendLobbyChatMsg(lobbyID, buffer, bytes + 1);
-        std::cout << "[DEBUG] Sent game state message, size: " << bytes << " bytes" << std::endl;
-    } else {
-        std::cout << "[ERROR] Game state message too large or failed: " << bytes << std::endl;
+        for (const auto& [steamID, conn] : m_connections) {
+            m_pNetworkingSockets->SendMessageToConnection(conn, buffer, bytes + 1, k_nSteamNetworkingSend_Reliable, nullptr);
+        }
     }
 }
 
@@ -359,6 +323,7 @@ void CubeGame::StartGame() {
     enemies.clear();
     bullets.clear();
     for (auto& player : players) {
+        player.second.speed = 200.0f;
         player.second.health = 100;
         player.second.isAlive = true;
         player.second.kills = 0;
@@ -369,6 +334,7 @@ void CubeGame::StartGame() {
         SteamMatchmaking()->SetLobbyMemberData(lobbyID, "ready", "0");
     }
     localPlayer.health = 100;
+    localPlayer.speed = 200.0f;
     localPlayer.isAlive = true;
     localPlayer.kills = 0;
     localPlayer.ready = false;
@@ -376,14 +342,138 @@ void CubeGame::StartGame() {
     ResetViewToDefault();
     std::cout << "[DEBUG] Starting game locally" << std::endl;
 
-    // Send S|START once here
     char startBuffer[16];
     int startBytes = snprintf(startBuffer, sizeof(startBuffer), "S|START");
     if (startBytes > 0 && static_cast<size_t>(startBytes) < sizeof(startBuffer)) {
-        SteamMatchmaking()->SendLobbyChatMsg(lobbyID, startBuffer, startBytes + 1);
-        std::cout << "[DEBUG] Sent game start signal" << std::endl;
+        for (const auto& [steamID, conn] : m_connections) {
+            m_pNetworkingSockets->SendMessageToConnection(conn, startBuffer, startBytes + 1, k_nSteamNetworkingSend_Reliable, nullptr);
+        }
+        std::cout << "[DEBUG] Sent game start signal via P2P" << std::endl;
     }
-    SendGameStateUpdate();
+}
+
+void CubeGame::ConnectToPlayer(CSteamID player) {
+    if (m_connections.find(player) != m_connections.end() || player == localPlayer.steamID) return;
+    SteamNetworkingIdentity identity;
+    identity.SetSteamID(player);
+    HSteamNetConnection conn = m_pNetworkingSockets->ConnectP2P(identity, 0, 0, nullptr);
+    if (conn != k_HSteamNetConnection_Invalid) {
+        m_connections[player] = conn;
+        std::cout << "[DEBUG] Connected to player " << player.ConvertToUint64() << std::endl;
+    } else {
+        std::cerr << "[ERROR] Failed to connect to player " << player.ConvertToUint64() << std::endl;
+    }
+}
+
+void CubeGame::OnNetConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t* pInfo) {
+    CSteamID remoteID = pInfo->m_info.m_identityRemote.GetSteamID();
+    if (pInfo->m_info.m_eState == k_ESteamNetworkingConnectionState_Connected) {
+        m_connections[remoteID] = pInfo->m_hConn;
+        std::cout << "[DEBUG] Connection established with " << remoteID.ConvertToUint64() << std::endl;
+    } else if (pInfo->m_info.m_eState == k_ESteamNetworkingConnectionState_ClosedByPeer ||
+               pInfo->m_info.m_eState == k_ESteamNetworkingConnectionState_ProblemDetectedLocally) {
+        m_connections.erase(remoteID);
+        m_pNetworkingSockets->CloseConnection(pInfo->m_hConn, 0, nullptr, false);
+        std::cout << "[DEBUG] Connection closed with " << remoteID.ConvertToUint64() << std::endl;
+    }
+}
+
+void CubeGame::ProcessNetworkMessages() {
+    for (auto& [steamID, conn] : m_connections) {
+        SteamNetworkingMessage_t* pMessages[16];
+        int numMsgs = m_pNetworkingSockets->ReceiveMessagesOnConnection(conn, pMessages, 16);
+        for (int i = 0; i < numMsgs; ++i) {
+            std::string msg(static_cast<const char*>(pMessages[i]->m_pData), pMessages[i]->m_cbSize);
+            ProcessMessage(msg, steamID);
+            pMessages[i]->Release();
+        }
+    }
+}
+
+void CubeGame::ProcessMessage(const std::string& msg, CSteamID sender) {
+    if (msg[0] == 'P') {
+        uint64_t steamID;
+        float x, y, speed;
+        int health, kills, ready, money;
+        if (sscanf(msg.c_str(), "P|%llu|%f|%f|%d|%d|%d|%f|%d", &steamID, &x, &y, &health, &kills, &ready, &speed, &money) == 8) {
+            CSteamID id(steamID);
+            if (id != localPlayer.steamID) {
+                if (x < 0 || x > 2000 || y < 0 || y > 2000 || health < 0 || health > 100 || speed < 0 || money < 0) {
+                    std::cerr << "[WARNING] Invalid player data from " << steamID << std::endl;
+                    return;
+                }
+                Player& p = players[id];
+                if (!players.count(id)) p.initialize();
+                p.x = x;
+                p.y = y;
+                p.health = health;
+                p.kills = kills;
+                p.ready = ready;
+                p.speed = speed;
+                p.money = money;
+            }
+        }
+    } else if (msg[0] == 'E' && sender == SteamMatchmaking()->GetLobbyOwner(lobbyID)) {
+        uint64_t enemyID;
+        float x, y, spawnDelay;
+        int health;
+        if (sscanf(msg.c_str(), "E|%llu|%f|%f|%d|%f", &enemyID, &x, &y, &health, &spawnDelay) == 5) {
+            if (enemies.count(enemyID)) {
+                Enemy& e = enemies[enemyID];
+                e.x = x;
+                e.y = y;
+                e.health = health;
+                e.spawnDelay = spawnDelay;
+            } else {
+                Enemy e;
+                e.initialize();
+                e.id = enemyID;
+                e.x = x;
+                e.y = y;
+                e.health = health;
+                e.spawnDelay = spawnDelay;
+                enemies[enemyID] = e;
+            }
+        }
+    } else if (msg.substr(0, 7) == "B|fire") {
+        int shooterID, bulletIdx;
+        float startX, startY, targetX, targetY;
+        if (sscanf(msg.c_str(), "B|fire|%d|%d|%f|%f|%f|%f", &shooterID, &bulletIdx, &startX, &startY, &targetX, &targetY) == 6) {
+            int uniqueBulletId = (shooterID << 16) | bulletIdx;
+            if (!bullets.count(uniqueBulletId)) {
+                Bullet b;
+                b.initialize(startX, startY, targetX, targetY);
+                b.id = uniqueBulletId;
+                bullets[uniqueBulletId] = b;
+            }
+        }
+    } else if (msg[0] == 'H' && sender == SteamMatchmaking()->GetLobbyOwner(lobbyID)) {
+        int bulletID;
+        uint64_t enemyID;
+        if (sscanf(msg.c_str(), "H|%d|%llu", &bulletID, &enemyID) == 2) {
+            if (bullets.count(bulletID)) bullets.erase(bulletID);
+            if (enemies.count(enemyID)) {
+                enemies[enemyID].health -= 25;
+                if (enemies[enemyID].health <= 0) enemies.erase(enemyID);
+            }
+        }
+    } else if (msg[0] == 'K' && sender == SteamMatchmaking()->GetLobbyOwner(lobbyID)) {
+        uint64_t playerID;
+        if (sscanf(msg.c_str(), "K|%llu", &playerID) == 1) {
+            CSteamID pid(playerID);
+            if (players.count(pid)) {
+                players[pid].kills++;
+                if (pid == localPlayer.steamID) {
+                    localPlayer.kills++;
+                }
+            }
+        }
+    } else if (msg == "S|START" && sender == SteamMatchmaking()->GetLobbyOwner(lobbyID)) {
+        if (currentState != GameState::Playing) {
+            StartGame();
+            std::cout << "[DEBUG] Received S|START signal via P2P" << std::endl;
+        }
+    }
 }
 
 void CubeGame::OnLobbyCreated(LobbyCreated_t* result, bool bIOFailure) {
@@ -441,7 +531,17 @@ void CubeGame::OnLobbyListReceived(LobbyMatchList_t* result, bool bIOFailure) {
 
 void CubeGame::OnLobbyChatUpdate(LobbyChatUpdate_t* pParam) {
     if (pParam->m_ulSteamIDLobby == lobbyID.ConvertToUint64()) {
-        // Handled by LobbyState
+        if (pParam->m_rgfChatMemberStateChange & k_EChatMemberStateChangeEntered) {
+            CSteamID newMember(pParam->m_ulSteamIDMakingChange);
+            ConnectToPlayer(newMember);
+        } else if (pParam->m_rgfChatMemberStateChange & (k_EChatMemberStateChangeLeft | k_EChatMemberStateChangeDisconnected)) {
+            CSteamID leavingMember(pParam->m_ulSteamIDMakingChange);
+            if (m_connections.count(leavingMember)) {
+                m_pNetworkingSockets->CloseConnection(m_connections[leavingMember], 0, nullptr, false);
+                m_connections.erase(leavingMember);
+                std::cout << "[DEBUG] Player " << leavingMember.ConvertToUint64() << " disconnected" << std::endl;
+            }
+        }
     }
 }
 
@@ -450,206 +550,8 @@ void CubeGame::OnLobbyChatMsg(LobbyChatMsg_t* pParam) {
 
     char buffer[1024];
     int bytes = SteamMatchmaking()->GetLobbyChatEntry(lobbyID, pParam->m_iChatID, nullptr, buffer, sizeof(buffer), nullptr);
-    if (bytes <= 0) {
-        std::cerr << "[ERROR] Failed to receive lobby chat message" << std::endl;
-        return;
-    }
+    if (bytes <= 0) return;
 
     std::string msg(buffer);
-
-    if (msg[0] == 'P') {
-        uint64_t steamID;
-        float x, y;
-        int health, kills, ready;
-        if (sscanf(msg.c_str(), "P|%llu|%f|%f|%d|%d|%d", &steamID, &x, &y, &health, &kills, &ready) == 6) {
-            CSteamID id(steamID);
-            if (id != localPlayer.steamID) {
-                Player& p = players[id];
-                if (!players.count(id)) p.initialize();
-                p.x = std::isnan(x) ? (players.count(id) ? players[id].x : 0.0f) : x;
-                p.y = std::isnan(y) ? (players.count(id) ? players[id].y : 0.0f) : y;
-                p.health = health;
-                p.kills = kills;
-                p.ready = ready;
-                std::cout << "[DEBUG] Updated player " << steamID << " target position: (" << p.x << ", " << p.y << ")" << std::endl;
-            }
-        }
-    }
-    else if (msg == "S|START") {
-        if (currentState != GameState::Playing) {
-            StartGame();
-            std::cout << "[DEBUG] Received S|START signal, transitioning to Playing state" << std::endl;
-        } else {
-            std::cout << "[DEBUG] Ignored S|START, already in Playing state" << std::endl;
-        }
-    }
-    else if (msg[0] == 'B') {
-        uint64_t shooterID;
-        int bulletIdx;
-        float x, y, vx, vy;
-        if (sscanf(msg.c_str(), "B|%llu|%d|%f|%f|%f|%f", &shooterID, &bulletIdx, &x, &y, &vx, &vy) == 6) {
-            int uniqueBulletId = static_cast<int>((shooterID & 0xFFFF) << 16 | (bulletIdx & 0xFFFF));
-            if (!bullets.count(uniqueBulletId)) {
-                Bullet b;
-                b.initialize(x, y, x + vx, y + vy);
-                b.x = std::isnan(x) ? 0.0f : x;
-                b.y = std::isnan(y) ? 0.0f : y;
-                b.velocityX = std::isnan(vx) ? 0.0f : vx;
-                b.velocityY = std::isnan(vy) ? 0.0f : vy;
-                b.lifetime = 2.0f;
-                b.id = uniqueBulletId;
-                bullets[uniqueBulletId] = b;
-                std::cout << "[DEBUG] Added client bullet " << uniqueBulletId << " at (" << b.x << ", " << b.y << ")" << std::endl;
-            }
-        }
-    }
-    else if (msg[0] == 'G') {
-        if (currentState != GameState::Playing) {
-            StartGame();
-            std::cout << "[DEBUG] Received G| message, forcing transition to Playing state" << std::endl;
-        }
-
-        std::vector<std::string> parts;
-        size_t pos = 0;
-        std::string tempMsg = msg;
-        while ((pos = tempMsg.find('|')) != std::string::npos) {
-            parts.push_back(tempMsg.substr(0, pos));
-            tempMsg.erase(0, pos + 1);
-        }
-        parts.push_back(tempMsg);
-
-        if (parts.size() < 4) {
-            std::cerr << "[ERROR] Invalid game state message format" << std::endl;
-            return;
-        }
-
-        std::string playerData = parts[1];
-        std::unordered_map<CSteamID, Player, CSteamIDHash> newPlayers;
-        pos = 0;
-        while ((pos = playerData.find(';')) != std::string::npos) {
-            std::string pData = playerData.substr(0, pos);
-            uint64_t steamID;
-            float x = 0.0f, y = 0.0f;
-            int health = 0, kills = 0, alive = 0;
-            if (sscanf(pData.c_str(), "%llu,%f,%f,%d,%d,%d", &steamID, &x, &y, &health, &kills, &alive) == 6) {
-                CSteamID id(steamID);
-                Player p = players.count(id) ? players[id] : Player();
-                if (!players.count(id)) p.initialize();
-                p.steamID = id;
-                p.x = std::isnan(x) ? (players.count(id) ? players[id].x : 0.0f) : x;
-                p.y = std::isnan(y) ? (players.count(id) ? players[id].y : 0.0f) : y;
-                p.health = health;
-                p.kills = kills;
-                p.isAlive = alive;
-                newPlayers[id] = p;
-            }
-            playerData.erase(0, pos + 1);
-        }
-        players = newPlayers;
-        if (players.count(localPlayer.steamID)) {
-            localPlayer.health = players[localPlayer.steamID].health;
-            localPlayer.kills = players[localPlayer.steamID].kills;
-            localPlayer.isAlive = players[localPlayer.steamID].isAlive;
-        }
-        players[localPlayer.steamID] = localPlayer;
-
-        std::string enemyData = parts[2];
-        pos = 0;
-        while ((pos = enemyData.find(';')) != std::string::npos) {
-            std::string eData = enemyData.substr(0, pos);
-            uint64_t id;
-            float x = 0.0f, y = 0.0f;
-            int health, spawnDelayMs;
-            if (sscanf(eData.c_str(), "%llu,%f,%f,%d,%d", &id, &x, &y, &health, &spawnDelayMs) == 5) {
-                if (enemies.count(id)) {
-                    Enemy& e = enemies[id];
-                    float oldX = e.x, oldY = e.y;
-                    e.x = std::isnan(x) ? e.x : e.x + (x - e.x) * 0.5f;
-                    e.y = std::isnan(y) ? e.y : e.y + (y - e.y) * 0.5f;
-                    e.health = health;
-                    e.spawnDelay = spawnDelayMs / 1000.0f;
-                    std::cout << "[DEBUG] Updated enemy " << id << " from (" << oldX << ", " << oldY << ") to (" << e.x << ", " << e.y << "), spawnDelay: " << e.spawnDelay << std::endl;
-                } else {
-                    Enemy e;
-                    e.initialize();
-                    e.x = std::isnan(x) ? 0.0f : x;
-                    e.y = std::isnan(y) ? 0.0f : y;
-                    e.renderedX = e.x;
-                    e.renderedY = e.y;
-                    e.health = health;
-                    e.spawnDelay = spawnDelayMs / 1000.0f;
-                    e.id = id;
-                    enemies[id] = e;
-                    std::cout << "[DEBUG] Added new enemy " << id << " at (" << e.x << ", " << e.y << "), spawnDelay: " << e.spawnDelay << std::endl;
-                }
-            }
-            enemyData.erase(0, pos + 1);
-        }
-        for (auto it = enemies.begin(); it != enemies.end();) {
-            if (enemyData.find(std::to_string(it->first)) == std::string::npos && !enemyData.empty()) {
-                std::cout << "[DEBUG] Removed enemy " << it->first << " at (" << it->second.x << ", " << it->second.y << ")" << std::endl;
-                it = enemies.erase(it);
-            } else {
-                ++it;
-            }
-        }
-
-        std::string bulletData = parts[3];
-        pos = 0;
-        while ((pos = bulletData.find(';')) != std::string::npos) {
-            std::string bData = bulletData.substr(0, pos);
-            uint64_t shooterID;
-            int bulletIdx;
-            float x = 0.0f, y = 0.0f, vx = 0.0f, vy = 0.0f;
-            if (sscanf(bData.c_str(), "%llu,%d,%f,%f,%f,%f", &shooterID, &bulletIdx, &x, &y, &vx, &vy) == 6) {
-                int uniqueBulletId = static_cast<int>((shooterID & 0xFFFF) << 16 | (bulletIdx & 0xFFFF));
-                if (bullets.count(uniqueBulletId)) {
-                    Bullet& b = bullets[uniqueBulletId];
-                    float oldX = b.x, oldY = b.y;
-                    b.x = std::isnan(x) ? b.x : b.x + (x - b.x) * 0.2f;
-                    b.y = std::isnan(y) ? b.y : b.y + (y - b.y) * 0.2f;
-                    b.velocityX = std::isnan(vx) ? b.velocityX : vx;
-                    b.velocityY = std::isnan(vy) ? b.velocityY : vy;
-                    std::cout << "[DEBUG] Updated bullet " << uniqueBulletId << " from (" << oldX << ", " << oldY << ") to (" << b.x << ", " << b.y << ")" << std::endl;
-                } else {
-                    Bullet b;
-                    b.initialize(x, y, x + vx, y + vy);
-                    b.x = std::isnan(x) ? 0.0f : x;
-                    b.y = std::isnan(y) ? 0.0f : y;
-                    b.velocityX = std::isnan(vx) ? 0.0f : vx;
-                    b.velocityY = std::isnan(vy) ? 0.0f : vy;
-                    b.lifetime = 2.0f;
-                    b.id = uniqueBulletId;
-                    bullets[uniqueBulletId] = b;
-                    std::cout << "[DEBUG] Added new bullet " << uniqueBulletId << " at (" << b.x << ", " << b.y << ")" << std::endl;
-                }
-            }
-            bulletData.erase(0, pos + 1);
-        }
-        for (auto it = bullets.begin(); it != bullets.end();) {
-            bool found = false;
-            pos = 0;
-            std::string tempBulletData = parts[3];
-            while ((pos = tempBulletData.find(';')) != std::string::npos) {
-                std::string bData = tempBulletData.substr(0, pos);
-                uint64_t shooterID;
-                int bulletIdx;
-                float x, y, vx, vy;
-                if (sscanf(bData.c_str(), "%llu,%d,%f,%f,%f,%f", &shooterID, &bulletIdx, &x, &y, &vx, &vy) == 6) {
-                    int uniqueBulletId = static_cast<int>((shooterID & 0xFFFF) << 16 | (bulletIdx & 0xFFFF));
-                    if (uniqueBulletId == it->first) {
-                        found = true;
-                        break;
-                    }
-                }
-                tempBulletData.erase(0, pos + 1);
-            }
-            if (!found && !bulletData.empty()) {
-                std::cout << "[DEBUG] Removed bullet " << it->first << " at (" << it->second.x << ", " << it->second.y << ")" << std::endl;
-                it = bullets.erase(it);
-            } else {
-                ++it;
-            }
-        }
-    }
+    // Minimal use of lobby chat; most messages handled via P2P
 }

@@ -9,6 +9,7 @@ enum class GameState {
     Playing,
     Spectating,
     Leaderboard,
+    Shopping, 
     GameOver
 };
 

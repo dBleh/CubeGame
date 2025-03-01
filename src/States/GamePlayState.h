@@ -30,9 +30,19 @@ private:
     void SendEnemyUpdate(); 
     void SendGameStateUpdate();
     void SendPlayerUpdate();
+    void SpawnSniperBullet(uint64_t enemyId, float targetX, float targetY);
     float lastEnemyUpdateTime = 0.0f;
     const float enemyUpdateRate = 0.2f;
     bool menuVisible; // Flag to toggle menu visibility without pausing
+    bool showHealthBars; // New: Toggle for health bars
+    sf::RectangleShape arrowShape;
+    void RenderStoreUI();        // New: Draw store UI
+    void HandleStorePurchase();
+    bool storeVisible;
+    sf::Text storeTitle;
+    sf::Text speedBoostText;
+    sf::RectangleShape speedBoostButton;
+    sf::Font font;
 };
 
 #endif // GAMEPLAYSTATE_H
