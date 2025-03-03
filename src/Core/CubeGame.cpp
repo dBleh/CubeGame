@@ -12,38 +12,8 @@
 
 const char* CubeGame::GAME_ID = "CubeShooter_v1";
 
-// HUD Implementation
-HUD::HUD(sf::Font& font) : font(font) {}
 
-void HUD::addElement(const std::string& id, const std::string& content, unsigned int size,
-                     sf::Vector2f pos, GameState visibleState, RenderMode mode) {
-    sf::Text text;
-    text.setFont(font);
-    text.setString(content);
-    text.setCharacterSize(size);
-    text.setFillColor(sf::Color::White);
-    elements[id] = {text, pos, visibleState, mode};
-}
 
-void HUD::updateText(const std::string& id, const std::string& content) {
-    if (elements.find(id) != elements.end()) {
-        elements[id].text.setString(content);
-    }
-}
-
-void HUD::render(sf::RenderWindow& window, const sf::View& view, GameState currentState) {
-    sf::Vector2f viewTopLeft = view.getCenter() - view.getSize() / 2.f;
-    for (auto& [id, element] : elements) {
-        if (element.visibleState == currentState) {
-            if (element.mode == RenderMode::ScreenSpace) {
-                element.text.setPosition(element.pos);
-            } else {
-                element.text.setPosition(viewTopLeft + element.pos);
-            }
-            window.draw(element.text);
-        }
-    }
-}
 
 // CubeGame Implementation
 CubeGame::CubeGame() : hud(font) {
@@ -85,6 +55,7 @@ void CubeGame::Run() {
     sf::Clock clock;
     std::unique_ptr<State> state;
 
+    // If we were already in a lobby, connect to players:
     if (inLobby) {
         int memberCount = SteamMatchmaking()->GetNumLobbyMembers(lobbyID);
         for (int i = 0; i < memberCount; ++i) {
@@ -94,7 +65,12 @@ void CubeGame::Run() {
     }
 
     while (window.isOpen()) {
+        // Existing Steam callbacks for matchmaking/lobby:
         SteamAPI_RunCallbacks();
+
+        // New line: let SteamNetworkingSockets invoke our OnSteamNetConnectionStatusChanged
+        m_pNetworkingSockets->RunCallbacks();  // <--- ADD THIS
+
         float dt = clock.restart().asSeconds();
         dt = std::min(dt, 0.033f);
 
@@ -104,8 +80,10 @@ void CubeGame::Run() {
             if (state) state->ProcessEvent(event);
         }
 
+        // Existing function that handles incoming data messages (ProcessMessage, etc.)
         ProcessNetworkMessages();
 
+        // Typical finite-state-machine for your states:
         switch (currentState) {
             case GameState::MainMenu:
                 if (!state || !dynamic_cast<MainMenuState*>(state.get()))
@@ -138,11 +116,14 @@ void CubeGame::Run() {
 
         if (state) {
             state->Update(dt);
-            if (state && currentState == GetCurrentState()) state->Render();
+            if (state && currentState == GetCurrentState()) {
+                state->Render();
+            }
         }
     }
     std::cout << "[DEBUG] Game loop exited normally" << std::endl;
 }
+
 
 void CubeGame::ProcessEvents(sf::Event& event) {
     if (event.type == sf::Event::Closed) {
@@ -150,24 +131,168 @@ void CubeGame::ProcessEvents(sf::Event& event) {
     }
 }
 
-void CubeGame::SetupInitialHUD() {
-    hud.addElement("status", "Main Menu", 16, sf::Vector2f(10, 10), GameState::MainMenu, HUD::RenderMode::ScreenSpace);
-    hud.addElement("createLobby", "1. Create Lobby", 24, sf::Vector2f(SCREEN_WIDTH/2 - 100, 200), GameState::MainMenu, HUD::RenderMode::ScreenSpace);
-    hud.addElement("joinLobby", "2. Search Lobbies", 24, sf::Vector2f(SCREEN_WIDTH/2 - 100, 250), GameState::MainMenu, HUD::RenderMode::ScreenSpace);
-    hud.addElement("lobbyPrompt", "Enter Lobby Name (Press Enter to Create, ESC to Cancel): ", 20, sf::Vector2f(SCREEN_WIDTH/2 - 200, 200), GameState::LobbyCreation, HUD::RenderMode::ScreenSpace);
-    hud.addElement("searchStatus", "Searching...", 16, sf::Vector2f(10, 10), GameState::LobbySearch, HUD::RenderMode::ScreenSpace);
-    hud.addElement("lobbyList", "Available Lobbies:\n", 20, sf::Vector2f(SCREEN_WIDTH/2 - 150, 100), GameState::LobbySearch, HUD::RenderMode::ScreenSpace);
-    
-    hud.addElement("lobbyStatus", "Lobby", 16, sf::Vector2f(10, 10), GameState::Lobby, HUD::RenderMode::ScreenSpace);
-    hud.addElement("ready", "Press R to Toggle Ready", 20, sf::Vector2f(SCREEN_WIDTH/2 - 100, 300), GameState::Lobby, HUD::RenderMode::ScreenSpace);
-    hud.addElement("startGame", "Press S to Start Game (Host Only)", 20, sf::Vector2f(SCREEN_WIDTH/2 - 150, 350), GameState::Lobby, HUD::RenderMode::ScreenSpace);
-    hud.addElement("returnMain", "Press M to Return to Main Menu", 20, sf::Vector2f(SCREEN_WIDTH/2 - 150, 400), GameState::Lobby, HUD::RenderMode::ScreenSpace);
-    
-    hud.addElement("gameStatus", "Playing", 16, sf::Vector2f(10, 10), GameState::Playing, HUD::RenderMode::ViewSpace);
-    hud.addElement("level", "Level: 0\nEnemies: 0\nHP: 100", 16, sf::Vector2f(10, 50), GameState::Playing, HUD::RenderMode::ViewSpace);
-    hud.addElement("scoreboard", "Scoreboard:\n", 16, sf::Vector2f(SCREEN_WIDTH - 200, 10), GameState::Playing, HUD::RenderMode::ViewSpace);
-    hud.addElement("menu", "", 20, sf::Vector2f(10, 300), GameState::Playing, HUD::RenderMode::ViewSpace);
+void CubeGame::SetupInitialHUD()
+{
+    //
+    // MAIN MENU
+    //
+    hud.addElement(
+        /* id          */ "title",
+        /* content     */ "MAIN MENU",
+        /* size        */ 30,
+        /* position    */ sf::Vector2f(50.f, 50.f),
+        /* visibleState*/ GameState::MainMenu,
+        /* renderMode  */ HUD::RenderMode::ScreenSpace,
+        /* hoverable   */ false // no hover effect on the title
+    );
+
+    hud.addElement(
+        "createLobby",
+        "Create Lobby",
+        24,
+        sf::Vector2f(100.f, 150.f),
+        GameState::MainMenu,
+        HUD::RenderMode::ScreenSpace,
+        true // hoverable, so text color changes slightly on hover
+    );
+
+    hud.addElement(
+        "searchLobby",
+        "Search Lobbies",
+        24,
+        sf::Vector2f(100.f, 200.f),
+        GameState::MainMenu,
+        HUD::RenderMode::ScreenSpace,
+        true // hoverable
+    );
+
+
+    //
+    // LOBBY CREATION
+    //
+    hud.addElement(
+        "lobbyPrompt",
+        "Enter Lobby Name (Press Enter to Create, ESC to Cancel):",
+        18,
+        sf::Vector2f(50.f, 200.f),
+        GameState::LobbyCreation,
+        HUD::RenderMode::ScreenSpace,
+        false
+    );
+
+
+    //
+    // LOBBY SEARCH
+    //
+    hud.addElement(
+        "searchStatus",
+        "Searching...",
+        18,
+        sf::Vector2f(20.f, 20.f),
+        GameState::LobbySearch,
+        HUD::RenderMode::ScreenSpace,
+        false
+    );
+
+    hud.addElement(
+        "lobbyList",
+        "Available Lobbies:\n",
+        20,
+        sf::Vector2f(50.f, 100.f),
+        GameState::LobbySearch,
+        HUD::RenderMode::ScreenSpace,
+        false
+    );
+
+
+    //
+    // LOBBY
+    //
+    hud.addElement(
+        "lobbyStatus",
+        "Lobby",
+        22,
+        sf::Vector2f(20.f, 20.f),
+        GameState::Lobby,
+        HUD::RenderMode::ScreenSpace,
+        false
+    );
+
+    hud.addElement(
+        "ready",
+        "Press R to Toggle Ready",
+        20,
+        sf::Vector2f(SCREEN_WIDTH / 2.f - 100.f, 300.f),
+        GameState::Lobby,
+        HUD::RenderMode::ScreenSpace,
+        false
+    );
+
+    hud.addElement(
+        "startGame",
+        "Press S to Start Game (Host Only)",
+        20,
+        sf::Vector2f(SCREEN_WIDTH / 2.f - 100.f, 350.f),
+        GameState::Lobby,
+        HUD::RenderMode::ScreenSpace,
+        false
+    );
+
+    hud.addElement(
+        "returnMain",
+        "Press M to Return to Main Menu",
+        20,
+        sf::Vector2f(SCREEN_WIDTH / 2.f - 100.f, 400.f),
+        GameState::Lobby,
+        HUD::RenderMode::ScreenSpace,
+        false
+    );
+
+    hud.updateBaseColor("level", sf::Color::White);
+    //
+    // GAMEPLAY
+    //
+    hud.addElement(
+        "gameStatus",
+        "Playing",
+        16,
+        sf::Vector2f(10.f, 10.f),
+        GameState::Playing,
+        HUD::RenderMode::ViewSpace,
+        false
+    );
+    hud.updateBaseColor("scoreboard", sf::Color::White);
+    hud.addElement(
+        "level",
+        "Level: 0\nEnemies: 0\nHP: 100",
+        16,
+        sf::Vector2f(10.f, 50.f),
+        GameState::Playing,
+        HUD::RenderMode::ViewSpace,
+        false
+    );
+    hud.updateBaseColor("scoreboard", sf::Color::White);
+    hud.addElement(
+        "scoreboard",
+        "Scoreboard:\n",
+        16,
+        sf::Vector2f(SCREEN_WIDTH - 200.f, 10.f),
+        GameState::Playing,
+        HUD::RenderMode::ViewSpace,
+        false
+    );
+    hud.updateBaseColor("scoreboard", sf::Color::White);
+    hud.addElement(
+        "menu",
+        "",
+        20,
+        sf::Vector2f(10.f, 300.f),
+        GameState::Playing,
+        HUD::RenderMode::ViewSpace,
+        false
+    );
 }
+
 
 void CubeGame::RenderHUDLayer() {
     hud.render(window, view, currentState);
@@ -180,7 +305,17 @@ void CubeGame::ResetViewToDefault() {
 }
 
 void CubeGame::EnterLobbyCreation() {
+    // If we’re already in a lobby, do nothing.
     if (inLobby) return;
+
+    // NEW: If Steam isn’t ready, show a warning and block creation.
+    if (!IsSteamInitialized()) {
+        hud.updateText("status", "Waiting for Steam handshake. Please try again soon...");
+        std::cout << "[DEBUG] Attempted to create lobby before Steam was ready." << std::endl;
+        return;
+    }
+
+    // Otherwise proceed as normal
     currentState = GameState::LobbyCreation;
     lobbyNameInput.clear();
     hud.updateText("lobbyPrompt", "Enter Lobby Name (Press Enter to Create, ESC to Cancel): ");
@@ -242,8 +377,8 @@ void CubeGame::SendPlayerUpdate() {
         p.x = p.y = 0.0f;
         std::cout << "[ERROR] Player position was NaN, reset to (0,0)" << std::endl;
     }
-    int bytes = snprintf(buffer, sizeof(buffer), "P|%llu|%.1f|%.1f|%d|%d|%d|%.1f|%d",
-                         p.steamID.ConvertToUint64(), p.x, p.y, p.health, p.kills, p.ready ? 1 : 0, p.speed, p.money);
+    int bytes = snprintf(buffer, sizeof(buffer), "P|%llu|%.1f|%.1f|%d|%d|%d",
+                         p.steamID.ConvertToUint64(), p.x, p.y, p.health, p.kills, p.ready ? 1 : 0);
     if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
         for (const auto& [steamID, conn] : m_connections) {
             m_pNetworkingSockets->SendMessageToConnection(conn, buffer, bytes + 1, k_nSteamNetworkingSend_Reliable, nullptr);
@@ -323,7 +458,6 @@ void CubeGame::StartGame() {
     enemies.clear();
     bullets.clear();
     for (auto& player : players) {
-        player.second.speed = 200.0f;
         player.second.health = 100;
         player.second.isAlive = true;
         player.second.kills = 0;
@@ -334,7 +468,6 @@ void CubeGame::StartGame() {
         SteamMatchmaking()->SetLobbyMemberData(lobbyID, "ready", "0");
     }
     localPlayer.health = 100;
-    localPlayer.speed = 200.0f;
     localPlayer.isAlive = true;
     localPlayer.kills = 0;
     localPlayer.ready = false;
@@ -365,18 +498,30 @@ void CubeGame::ConnectToPlayer(CSteamID player) {
     }
 }
 
-void CubeGame::OnNetConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t* pInfo) {
+// This replaces (or renames) your old OnNetConnectionStatusChanged.
+// It must match the signature given by STEAM_CALLBACK.
+void CubeGame::OnSteamNetConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t* pInfo)
+{
     CSteamID remoteID = pInfo->m_info.m_identityRemote.GetSteamID();
-    if (pInfo->m_info.m_eState == k_ESteamNetworkingConnectionState_Connected) {
+
+    if (pInfo->m_info.m_eState == k_ESteamNetworkingConnectionState_Connected)
+    {
+        // The connection just transitioned into the connected state.
         m_connections[remoteID] = pInfo->m_hConn;
-        std::cout << "[DEBUG] Connection established with " << remoteID.ConvertToUint64() << std::endl;
-    } else if (pInfo->m_info.m_eState == k_ESteamNetworkingConnectionState_ClosedByPeer ||
-               pInfo->m_info.m_eState == k_ESteamNetworkingConnectionState_ProblemDetectedLocally) {
+        std::cout << "[DEBUG] Connection established with " 
+                  << remoteID.ConvertToUint64() << std::endl;
+    }
+    else if (pInfo->m_info.m_eState == k_ESteamNetworkingConnectionState_ClosedByPeer ||
+             pInfo->m_info.m_eState == k_ESteamNetworkingConnectionState_ProblemDetectedLocally)
+    {
+        // The connection either timed out or was closed.
         m_connections.erase(remoteID);
         m_pNetworkingSockets->CloseConnection(pInfo->m_hConn, 0, nullptr, false);
-        std::cout << "[DEBUG] Connection closed with " << remoteID.ConvertToUint64() << std::endl;
+        std::cout << "[DEBUG] Connection closed with " 
+                  << remoteID.ConvertToUint64() << std::endl;
     }
 }
+
 
 void CubeGame::ProcessNetworkMessages() {
     for (auto& [steamID, conn] : m_connections) {
@@ -393,12 +538,12 @@ void CubeGame::ProcessNetworkMessages() {
 void CubeGame::ProcessMessage(const std::string& msg, CSteamID sender) {
     if (msg[0] == 'P') {
         uint64_t steamID;
-        float x, y, speed;
-        int health, kills, ready, money;
-        if (sscanf(msg.c_str(), "P|%llu|%f|%f|%d|%d|%d|%f|%d", &steamID, &x, &y, &health, &kills, &ready, &speed, &money) == 8) {
+        float x, y;
+        int health, kills, ready;
+        if (sscanf(msg.c_str(), "P|%llu|%f|%f|%d|%d|%d", &steamID, &x, &y, &health, &kills, &ready) == 6) {
             CSteamID id(steamID);
             if (id != localPlayer.steamID) {
-                if (x < 0 || x > 2000 || y < 0 || y > 2000 || health < 0 || health > 100 || speed < 0 || money < 0) {
+                if (x < 0 || x > 2000 || y < 0 || y > 2000 || health < 0 || health > 100) {
                     std::cerr << "[WARNING] Invalid player data from " << steamID << std::endl;
                     return;
                 }
@@ -409,8 +554,6 @@ void CubeGame::ProcessMessage(const std::string& msg, CSteamID sender) {
                 p.health = health;
                 p.kills = kills;
                 p.ready = ready;
-                p.speed = speed;
-                p.money = money;
             }
         }
     } else if (msg[0] == 'E' && sender == SteamMatchmaking()->GetLobbyOwner(lobbyID)) {
@@ -460,12 +603,9 @@ void CubeGame::ProcessMessage(const std::string& msg, CSteamID sender) {
     } else if (msg[0] == 'K' && sender == SteamMatchmaking()->GetLobbyOwner(lobbyID)) {
         uint64_t playerID;
         if (sscanf(msg.c_str(), "K|%llu", &playerID) == 1) {
-            CSteamID pid(playerID);
-            if (players.count(pid)) {
-                players[pid].kills++;
-                if (pid == localPlayer.steamID) {
-                    localPlayer.kills++;
-                }
+            if (CSteamID(playerID) == localPlayer.steamID) {
+                localPlayer.kills++;
+                players[localPlayer.steamID] = localPlayer;
             }
         }
     } else if (msg == "S|START" && sender == SteamMatchmaking()->GetLobbyOwner(lobbyID)) {

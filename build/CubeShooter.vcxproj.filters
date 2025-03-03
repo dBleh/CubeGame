@@ -16,6 +16,9 @@
     <ClCompile Include="C:\Users\dunca\Desktop\Projects\CubeGame\src\Entities\Bullet.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="C:\Users\dunca\Desktop\Projects\CubeGame\src\Hud\Hud.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="C:\Users\dunca\Desktop\Projects\CubeGame\src\Networking\SteamManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

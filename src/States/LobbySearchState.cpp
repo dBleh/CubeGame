@@ -9,7 +9,7 @@ void LobbySearchState::Update(float dt) {
 }
 
 void LobbySearchState::Render() {
-    game->GetWindow().clear(sf::Color::Black);
+    game->GetWindow().clear(sf::Color::White);
     game->RenderHUDLayer();
     game->GetWindow().display();
 }

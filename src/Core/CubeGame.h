@@ -11,7 +11,7 @@
 #include "../Entities/Enemy.h"
 #include "../States/GameState.h"
 #include "../Entities/Player.h"
-
+#include "../Hud/Hud.h"
 
 
 
@@ -22,29 +22,6 @@ struct CSteamIDHash {
 };
 
 class State;
-
-class HUD {
-public:
-    HUD(sf::Font& font);
-    enum class RenderMode {
-        ScreenSpace,
-        ViewSpace
-    };
-    void addElement(const std::string& id, const std::string& content, unsigned int size, 
-                    sf::Vector2f pos, GameState visibleState, RenderMode mode = RenderMode::ScreenSpace);
-    void updateText(const std::string& id, const std::string& content);
-    void render(sf::RenderWindow& window, const sf::View& view, GameState currentState);
-
-private:
-    sf::Font& font;
-    struct HUDElement {
-        sf::Text text;
-        sf::Vector2f pos;
-        GameState visibleState;
-        RenderMode mode;
-    };
-    std::unordered_map<std::string, HUDElement> elements;
-};
 
 class CubeGame {
 public:
@@ -94,6 +71,11 @@ public:
     void AddDebugPlayer(CSteamID id);
     float GetShoppingTimer() const { return shoppingTimer; } // New
     void SetShoppingTimer(float t) { shoppingTimer = t; }
+    bool IsSteamInitialized() const {
+        // For debug mode, we might skip the check. Otherwise, confirm
+        // that SteamUser is valid and the user is actually logged on.
+        return debugMode || (SteamUser() && SteamUser()->BLoggedOn());
+    }
 private:
 float shoppingTimer; // New: Tracks shopping phase duration
     HUD hud;
@@ -119,6 +101,7 @@ float shoppingTimer; // New: Tracks shopping phase duration
     ISteamNetworkingSockets* m_pNetworkingSockets;
     std::unordered_map<CSteamID, HSteamNetConnection, CSteamIDHash> m_connections;
     bool debugMode = false; // Added
+    STEAM_CALLBACK(CubeGame, OnSteamNetConnectionStatusChanged, SteamNetConnectionStatusChangedCallback_t);
 
     CCallResult<CubeGame, LobbyCreated_t> lobbyCreatedCallResult;
     CCallResult<CubeGame, LobbyEnter_t> lobbyEnterCallResult;
@@ -135,7 +118,6 @@ float shoppingTimer; // New: Tracks shopping phase duration
     void OnLobbyListReceived(LobbyMatchList_t* pResult, bool bIOFailure);
     void OnLobbyChatUpdate(LobbyChatUpdate_t* pParam);
     void OnLobbyChatMsg(LobbyChatMsg_t* pParam);
-    STEAM_CALLBACK(CubeGame, OnNetConnectionStatusChanged, SteamNetConnectionStatusChangedCallback_t);
 
     static const char* GAME_ID;
 };

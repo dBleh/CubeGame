@@ -1,16 +1,19 @@
 @echo off
 cd C:\Users\dunca\Desktop\Projects\CubeGame\build\Release
 
-:: Launch Host (Steam instance)
-echo Launching Host instance...
-start "Host" cmd /k "CubeShooter.exe & echo Host running... & pause"
+if not exist CubeShooter.exe (
+    echo Error: CubeShooter.exe not found in C:\Users\dunca\Desktop\Projects\CubeGame\build\Release
+    pause
+    exit /b 1
+)
 
-:: Wait briefly to ensure host starts
+echo Launching Host instance in debug mode...
+start "Host" cmd /k "CubeShooter.exe --host & echo Host running... Press Ctrl+C to exit."
+
 timeout /t 2 /nobreak >nul
 
-:: Launch Client (Debug mode)
 echo Launching Client instance in debug mode...
-start "Client" cmd /k "CubeShooter.exe --debug & echo Client running... & pause"
+start "Client" cmd /k "CubeShooter.exe & echo Client running... Press Ctrl+C to exit."
 
-echo Two players launched! Host is Steam-authenticated, Client is in debug mode.
+echo Two players launched in debug mode! Game should start automatically.
 pause

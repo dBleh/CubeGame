@@ -59,6 +59,7 @@
         "xtree": "cpp",
         "xutility": "cpp",
         "sstream": "cpp",
-        "random": "cpp"
+        "random": "cpp",
+        "chrono": "cpp"
     }
 }

@@ -2,7 +2,7 @@
 #define LOBBYSTATE_H
 
 #include "State.h"
-
+#include "../Hud/Hud.h"
 class LobbyState : public State {
 public:
     LobbyState(CubeGame* game);

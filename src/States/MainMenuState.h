@@ -2,7 +2,7 @@
 #define MAINMENUSTATE_H
 
 #include "State.h"
-
+#include "../Hud/Hud.h"
 class MainMenuState : public State {
 public:
     MainMenuState(CubeGame* game);

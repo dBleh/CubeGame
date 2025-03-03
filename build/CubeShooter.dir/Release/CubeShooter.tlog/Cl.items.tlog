@@ -3,6 +3,7 @@ C:\Users\dunca\Desktop\Projects\CubeGame\src\Core\CubeGame.cpp;C:\Users\dunca\De
 C:\Users\dunca\Desktop\Projects\CubeGame\src\Entities\Player.cpp;C:\Users\dunca\Desktop\Projects\CubeGame\build\CubeShooter.dir\Release\Player.obj
 C:\Users\dunca\Desktop\Projects\CubeGame\src\Entities\Enemy.cpp;C:\Users\dunca\Desktop\Projects\CubeGame\build\CubeShooter.dir\Release\Enemy.obj
 C:\Users\dunca\Desktop\Projects\CubeGame\src\Entities\Bullet.cpp;C:\Users\dunca\Desktop\Projects\CubeGame\build\CubeShooter.dir\Release\Bullet.obj
+C:\Users\dunca\Desktop\Projects\CubeGame\src\Hud\Hud.cpp;C:\Users\dunca\Desktop\Projects\CubeGame\build\CubeShooter.dir\Release\Hud.obj
 C:\Users\dunca\Desktop\Projects\CubeGame\src\Networking\SteamManager.cpp;C:\Users\dunca\Desktop\Projects\CubeGame\build\CubeShooter.dir\Release\SteamManager.obj
 C:\Users\dunca\Desktop\Projects\CubeGame\src\States\MainMenuState.cpp;C:\Users\dunca\Desktop\Projects\CubeGame\build\CubeShooter.dir\Release\MainMenuState.obj
 C:\Users\dunca\Desktop\Projects\CubeGame\src\States\LobbyState.cpp;C:\Users\dunca\Desktop\Projects\CubeGame\build\CubeShooter.dir\Release\LobbyState.obj
