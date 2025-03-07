@@ -29,3 +29,20 @@ xcopy /E /I /Y * C:\Users\dunca\Desktop\sdk\tools\ContentBuilder\content
 
 
 then launch steampipgui and guild vdfs then post.
+
+
+to push  to git
+
+cd /Users/dunca/Desktop/Game  # Navigate to your project folder
+git status                    # Check changes (optional)
+git add .                     # Stage all changes
+git commit -m "Removed bullet pre-check collision in ShootBullet"  # Commit changes
+git push origin main          # Push to GitHub
+
+to pull
+git stash
+git pull origin main
+git stash pop
+
+git add <file>
+git commit -m "Resolved merge conflicts"
