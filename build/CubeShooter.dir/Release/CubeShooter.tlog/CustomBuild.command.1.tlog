@@ -1,6 +1,6 @@
-^C:\USERS\DUNCA\DESKTOP\PROJECTS\CUBEGAME\CMAKELISTS.TXT
+^C:\USERS\DUNCA\DESKTOP\GAME\CMAKELISTS.TXT
 setlocal
-"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/dunca/Desktop/Projects/CubeGame -BC:/Users/dunca/Desktop/Projects/CubeGame/build --check-stamp-file C:/Users/dunca/Desktop/Projects/CubeGame/build/CMakeFiles/generate.stamp
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SC:/Users/dunca/Desktop/Game -BC:/Users/dunca/Desktop/Game/build --check-stamp-file C:/Users/dunca/Desktop/Game/build/CMakeFiles/generate.stamp
 if %errorlevel% neq 0 goto :cmEnd
 :cmEnd
 endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone

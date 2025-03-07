@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 # Paths
 set(STEAM_SDK_DIR "C:/Users/dunca/Desktop/sdk")
-set(SFML_DIR "C:/Users/dunca/Desktop/SFML-2.6.1")
+set(SFML_DIR "C:/SFML/SFML-2.5.1")
 # Include directories
 include_directories(
     ${STEAM_SDK_DIR}/public
@@ -28,15 +28,16 @@ add_executable(CubeShooter
     src/Entities/Player.cpp
     src/Entities/Enemy.cpp
     src/Entities/Bullet.cpp
+    src/Entities/EntityManager.cpp
     src/Hud/Hud.cpp
     src/Networking/SteamManager.cpp
+    src/Networking/NetworkManager.cpp
     src/States/MainMenuState.cpp
     src/States/LobbyState.cpp
     src/States/GameplayState.cpp
     src/States/GameOverState.cpp
     src/States/LobbyCreationState.cpp
     src/States/LobbySearchState.cpp
-    
 )
 # Link libraries
 target_link_libraries(CubeShooter
@@ -69,7 +70,7 @@ copy_if_exists("${CMAKE_SOURCE_DIR}/steam_appid.txt" "$<TARGET_FILE_DIR:CubeShoo
 
 # Copy SFML DLLs and font
 set(SFML_BIN_DIR "${SFML_DIR}/bin")
-copy_if_exists("C:/Users/dunca/Desktop/Projects/CubeGame/Roboto-Regular.ttf" "$<TARGET_FILE_DIR:CubeShooter>")
+copy_if_exists("C:/Users/dunca/Desktop/Game/Roboto-Regular.ttf" "$<TARGET_FILE_DIR:CubeShooter>")
 copy_if_exists("${SFML_BIN_DIR}/sfml-graphics-2.dll" "$<TARGET_FILE_DIR:CubeShooter>")
 copy_if_exists("${SFML_BIN_DIR}/sfml-graphics-d-2.dll" "$<TARGET_FILE_DIR:CubeShooter>")
 copy_if_exists("${SFML_BIN_DIR}/sfml-system-2.dll" "$<TARGET_FILE_DIR:CubeShooter>")

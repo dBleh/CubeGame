@@ -12,6 +12,7 @@ public:
 
 private:
     void ProcessEvents(const sf::Event& event);
+    void CreateLobby(const std::string& lobbyName);
 };
 
 #endif // LOBBYCREATIONSTATE_H

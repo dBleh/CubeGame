@@ -1,74 +1,93 @@
 #include "MainMenuState.h"
+#include "../Core/CubeGame.h"
+#include <iostream>
 
-MainMenuState::MainMenuState(CubeGame* game)
-    : State(game)
-{
-    // --- Create HUD Elements ---
-    // 1) "status" text at top-left (e.g., "Main Menu", or "Loading Steam...")
+MainMenuState::MainMenuState(CubeGame* game) : State(game) {
+    std::cout << "[DEBUG] MainMenuState constructor called\n";
+
+    // Clear any existing text for these keys
+    game->GetHUD().updateText("title", "");
+    game->GetHUD().updateText("createLobby", "");
+    game->GetHUD().updateText("searchLobby", "");
+
+    // Header text (white on steel blue header)
     game->GetHUD().addElement(
-        "status",
-        "",  // We'll update this in Update()
-        30,  // Character size
-        sf::Vector2f(10.f, 10.f),
-        GameState::MainMenu,
-        HUD::RenderMode::ScreenSpace,
-        false // not hoverable
+        "status", 
+        "", 
+        32, 
+        sf::Vector2f(SCREEN_WIDTH * 0.4f, 20.f), 
+        GameState::MainMenu, 
+        HUD::RenderMode::ScreenSpace, 
+        true
     );
-    game->GetHUD().updateBaseColor("status", sf::Color::White);
+    game->GetHUD().updateBaseColor("status", sf::Color::Black);
 
-    // 2) "leaveLobby" text (appears only if you're in a lobby)
+    // Leave lobby prompt (black text on white background)
     game->GetHUD().addElement(
-        "leaveLobby",
-        "",  // We'll update or clear this in Update()
-        20,
-        sf::Vector2f(SCREEN_WIDTH / 2.f - 150.f, 300.f),
-        GameState::MainMenu,
-        HUD::RenderMode::ScreenSpace,
-        false
+        "leaveLobby", 
+        "", 
+        24, 
+        sf::Vector2f(SCREEN_WIDTH * 0.4f, 20.f), 
+        GameState::MainMenu, 
+        HUD::RenderMode::ScreenSpace, 
+        true
     );
-    game->GetHUD().updateBaseColor("leaveLobby", sf::Color::White);
+    game->GetHUD().updateBaseColor("leaveLobby", sf::Color::Black);
 
-    // (Optional) 3) Add text for "Create Lobby" and "Search Lobbies"
-    // if you want them to display in the Main Menu:
+    // Create/Search lobby text (black text)
     game->GetHUD().addElement(
-        "createLobbyText",
-        "Create Lobby (Press 1)",
-        20,
-        sf::Vector2f(SCREEN_WIDTH / 2.f - 100.f, 200.f),
-        GameState::MainMenu,
-        HUD::RenderMode::ScreenSpace,
-        false
+        "createLobbyText", 
+        "Create Lobby (Press 1)", 
+        24, 
+        sf::Vector2f(SCREEN_WIDTH * 0.4f, 220.f), 
+        GameState::MainMenu, 
+        HUD::RenderMode::ScreenSpace, 
+        true
     );
-    game->GetHUD().updateBaseColor("createLobbyText", sf::Color::White);
+    game->GetHUD().updateBaseColor("createLobbyText", sf::Color::Black);
 
     game->GetHUD().addElement(
-        "searchLobbiesText",
-        "Search Lobbies (Press 2)",
-        20,
-        sf::Vector2f(SCREEN_WIDTH / 2.f - 100.f, 250.f),
-        GameState::MainMenu,
-        HUD::RenderMode::ScreenSpace,
-        false
+        "searchLobbiesText", 
+        "Search Lobbies (Press 2)", 
+        24, 
+        sf::Vector2f(SCREEN_WIDTH * 0.4f, 280.f), 
+        GameState::MainMenu, 
+        HUD::RenderMode::ScreenSpace, 
+        true
     );
-    game->GetHUD().updateBaseColor("searchLobbiesText", sf::Color::White);
+    game->GetHUD().updateBaseColor("searchLobbiesText", sf::Color::Black);
 
-    // --- Set up the invisible click-areas ---
-    createLobbyButton.setSize(sf::Vector2f(200.f, 30.f));
-    createLobbyButton.setPosition(SCREEN_WIDTH / 2.f - 100.f, 200.f);
-    createLobbyButton.setFillColor(sf::Color::Transparent);
+    // Add Exit Game option (black text)
+    game->GetHUD().addElement(
+        "exitGameText", 
+        "Exit Game (Press E)", 
+        24, 
+        sf::Vector2f(SCREEN_WIDTH * 0.4f, 340.f), // Positioned below Search Lobbies
+        GameState::MainMenu, 
+        HUD::RenderMode::ScreenSpace, 
+        true
+    );
+    game->GetHUD().updateBaseColor("exitGameText", sf::Color::Black);
 
-    searchLobbiesButton.setSize(sf::Vector2f(200.f, 30.f));
-    searchLobbiesButton.setPosition(SCREEN_WIDTH / 2.f - 100.f, 250.f);
+    // Invisible click areas (matching size/positions)
+    createLobbyButton.setSize(sf::Vector2f(300.f, 40.f));
+    createLobbyButton.setPosition(SCREEN_WIDTH * 0.5f - 150.f, 200.f);
+    
     searchLobbiesButton.setFillColor(sf::Color::Transparent);
+    searchLobbiesButton.setSize(sf::Vector2f(300.f, 40.f));
+    searchLobbiesButton.setPosition(SCREEN_WIDTH * 0.5f - 150.f, 260.f);
+    searchLobbiesButton.setFillColor(sf::Color::Transparent);
+    
+    exitGameButton.setSize(sf::Vector2f(300.f, 40.f));
+    exitGameButton.setPosition(SCREEN_WIDTH * 0.5f - 150.f, 320.f);
+    exitGameButton.setFillColor(sf::Color::Transparent);
 }
 
-void MainMenuState::Update(float dt)
-{
-    // Update "status" text
+void MainMenuState::Update(float dt) {
+    // Update header text based on Steam initialization and lobby status
     if (!game->IsSteamInitialized()) {
         game->GetHUD().updateText("status", "Loading Steam... please wait");
     } else {
-        // If Steam is initialized, show "Main Menu" (+ " (In Lobby)" if currently in a lobby)
         std::string status = "Main Menu";
         if (game->IsInLobby()) {
             status += " (In Lobby)";
@@ -76,7 +95,7 @@ void MainMenuState::Update(float dt)
         game->GetHUD().updateText("status", status);
     }
 
-    // If in a lobby, show the "Press ESC to leave" prompt. Otherwise, clear it.
+    // Show the "Leave Lobby" prompt only when in a lobby
     if (game->IsInLobby()) {
         game->GetHUD().updateText("leaveLobby", "Press ESC to Leave Lobby");
     } else {
@@ -84,62 +103,81 @@ void MainMenuState::Update(float dt)
     }
 }
 
-void MainMenuState::Render()
-{
-    // Only clear/display if indeed in MainMenu state
+void MainMenuState::Render() {
     if (game->GetCurrentState() != GameState::MainMenu) {
         return;
     }
 
-    game->GetWindow().clear(sf::Color::Black);
+    game->GetWindow().clear(sf::Color::White);
+    game->GetWindow().setView(game->GetWindow().getDefaultView());
 
-    // (Optional) Draw the transparent rectangles if you want to see them for debugging:
-    // game->GetWindow().draw(createLobbyButton);
-    // game->GetWindow().draw(searchLobbiesButton);
+    sf::RectangleShape headerBar;
+    headerBar.setSize(sf::Vector2f(SCREEN_WIDTH, 60.f));
+    headerBar.setFillColor(sf::Color(70, 130, 180)); // Steel blue
+    headerBar.setPosition(0.f, 0.f);
+    game->GetWindow().draw(headerBar);
 
-    // Draw HUD elements
-    game->RenderHUDLayer();
+    game->GetHUD().render(game->GetWindow(), game->GetWindow().getDefaultView(), game->GetCurrentState());
+
     game->GetWindow().display();
 }
 
-void MainMenuState::ProcessEvent(const sf::Event& event)
-{
+void MainMenuState::ProcessEvent(const sf::Event& event) {
     ProcessEvents(event);
 }
 
-void MainMenuState::ProcessEvents(const sf::Event& event)
-{
+void MainMenuState::ProcessEvents(const sf::Event& event) {
     if (event.type == sf::Event::KeyPressed) {
-        // Press 1 -> Enter Lobby Creation
         if (event.key.code == sf::Keyboard::Num1 && !game->IsInLobby()) {
-            game->EnterLobbyCreation();
+            if (!game->IsSteamInitialized()) {
+                game->GetHUD().updateText("status", "Waiting for Steam handshake. Please try again soon");
+                return;
+            }
+            // Switch state to LobbyCreation and initialize its HUD
+            game->SetCurrentState(GameState::LobbyCreation);
+            game->GetLobbyNameInput().clear();
+            game->GetHUD().updateText("lobbyPrompt", "Enter Lobby Name (Press Enter to Create, ESC to Cancel): ");
+            std::cout << "[DEBUG] Entering Lobby Creation state\n";
         }
-        // Press 2 -> Enter Lobby Search
         else if (event.key.code == sf::Keyboard::Num2 && !game->IsInLobby()) {
-            game->EnterLobbySearch();
-        }
-        // Press ESC -> Leave lobby (if in one)
+            // Switch state to LobbySearch
+            game->SetCurrentState(GameState::LobbySearch);
+            std::cout << "[DEBUG] Entering Lobby Search\n";
+        } 
         else if (event.key.code == sf::Keyboard::Escape && game->IsInLobby()) {
             SteamMatchmaking()->LeaveLobby(game->GetLobbyID());
-            game->GetCurrentState() = GameState::MainMenu;
+            game->SetCurrentState(GameState::MainMenu); // For consistency
             game->GetPlayers().clear();
-            std::cout << "[DEBUG] Left lobby from main menu." << std::endl;
+            std::cout << "[DEBUG] Left lobby from main menu.\n";
+        } 
+        else if (event.key.code == sf::Keyboard::E) { // Exit option
+            game->GetWindow().close();
+            std::cout << "[DEBUG] Exiting game from main menu.\n";
         }
     }
     else if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
         sf::Vector2i mousePos = sf::Mouse::getPosition(game->GetWindow());
         sf::Vector2f worldPos = game->GetWindow().mapPixelToCoords(mousePos, game->GetView());
-
         if (!game->IsInLobby()) {
-            // If user clicks the "Create Lobby" rectangle
             if (createLobbyButton.getGlobalBounds().contains(worldPos)) {
-                game->EnterLobbyCreation();
-                std::cout << "[DEBUG] Clicked Create Lobby" << std::endl;
-            }
-            // If user clicks the "Search Lobbies" rectangle
+                if (!game->IsSteamInitialized()) {
+                    game->GetHUD().updateText("status", "Waiting for Steam handshake. Please try again soon");
+                    return;
+                }
+                // Inline logic for entering LobbyCreation
+                game->SetCurrentState(GameState::LobbyCreation);
+                game->GetLobbyNameInput().clear();
+                game->GetHUD().updateText("lobbyPrompt", "Enter Lobby Name (Press Enter to Create, ESC to Cancel): ");
+                std::cout << "[DEBUG] Clicked Create Lobby: Entering Lobby Creation state\n";
+            } 
             else if (searchLobbiesButton.getGlobalBounds().contains(worldPos)) {
-                game->EnterLobbySearch();
-                std::cout << "[DEBUG] Clicked Search Lobbies" << std::endl;
+                // Switch state to LobbySearch
+                game->SetCurrentState(GameState::LobbySearch);
+                std::cout << "[DEBUG] Clicked Search Lobbies\n";
+            } 
+            else if (exitGameButton.getGlobalBounds().contains(worldPos)) {
+                game->GetWindow().close();
+                std::cout << "[DEBUG] Clicked Exit Game\n";
             }
         }
     }

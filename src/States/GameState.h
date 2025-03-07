@@ -4,12 +4,12 @@
 enum class GameState {
     MainMenu,
     LobbyCreation,
-    LobbySearch,  // New state for searching lobbies
+    LobbySearch,
     Lobby,
     Playing,
     Spectating,
     Leaderboard,
-    Shopping, 
+    Shopping,
     GameOver
 };
 

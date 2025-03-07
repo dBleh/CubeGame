@@ -60,6 +60,16 @@
         "xutility": "cpp",
         "sstream": "cpp",
         "random": "cpp",
-        "chrono": "cpp"
+        "chrono": "cpp",
+        "deque": "cpp",
+        "forward_list": "cpp",
+        "iomanip": "cpp",
+        "queue": "cpp",
+        "ratio": "cpp",
+        "stop_token": "cpp",
+        "thread": "cpp",
+        "functional": "cpp",
+        "unordered_set": "cpp",
+        "array": "cpp"
     }
 }

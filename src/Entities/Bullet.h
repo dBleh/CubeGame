@@ -9,8 +9,10 @@ struct Bullet {
     float x, y;
     float renderedX, renderedY;
     float velocityX, velocityY;
+    float lastX, lastY;   // Previous position for interpolation
+    float targetX, targetY; // Target position for interpolation
     float lifetime;
-    int id; // New field for unique identification
+    uint64_t id; // New field for unique identification
 
     void initialize(float startX, float startY, float targetX, float targetY);
     void update(float dt);

@@ -5,25 +5,33 @@
 #include <string>
 #include <unordered_map>
 #include "../States/GameState.h"
-
-/**
- * A minimal HUD class:
- * - Draws a plain white background if we're in MainMenu.
- * - Renders black text, turning gray on hover if marked hoverable.
- */
+#include "../Utils/Config.h"
+#include "../Entities/Player.h"
+#include <unordered_map>
+#include "../Utils/SteamHelpers.h"
 class HUD
 {
 public:
-    // Which space to render: absolute screen coordinates or offset by the view
     enum class RenderMode {
         ScreenSpace,
         ViewSpace
     };
 
-    // Create the HUD with a loaded sf::Font reference
-    explicit HUD(sf::Font& font);
+    struct HUDElement {
+        sf::Text text;
+        sf::Vector2f pos;
+        GameState visibleState;
+        RenderMode mode;
+        bool hoverable;
+        sf::Color baseColor;
+        sf::Color hoverColor;
+    };
 
-    // Add a text element
+    explicit HUD(sf::Font& font);
+    bool isFullyLoaded() const;
+
+void updateScoreboard(const std::unordered_map<CSteamID, Player, CSteamIDHash>& players);
+
     void addElement(const std::string& id,
                     const std::string& content,
                     unsigned int size,
@@ -32,34 +40,28 @@ public:
                     RenderMode mode = RenderMode::ScreenSpace,
                     bool hoverable = false);
 
-    // Change the displayed string for an existing text element
+    void refreshGameInfo(const sf::Vector2u& winSize,
+                     int currentLevel,
+                     size_t enemyCount,
+                     const Player& localPlayer,
+                     float nextLevelTimer,
+                     const std::unordered_map<CSteamID, Player, CSteamIDHash>& players);
+
     void updateText(const std::string& id, const std::string& content);
-
-    // Set the base (non-hover) color for an element
     void updateBaseColor(const std::string& id, const sf::Color& color);
-
-    // Render the HUD elements that match the current state
+    void updateElementPosition(const std::string& id, const sf::Vector2f& pos); // New method
     void render(sf::RenderWindow& window, const sf::View& view, GameState currentState);
 
-private:
-    // Internal structure for each text element
-    struct HUDElement {
-        sf::Text text;
-        sf::Vector2f pos;
-        GameState visibleState;
-        RenderMode mode;
-        bool hoverable;
-        sf::Color baseColor;   // color when not hovered
-        sf::Color hoverColor;  // color when hovered
-    };
+    const std::unordered_map<std::string, HUDElement>& getElements() const { return m_elements; }
+    void configureGameplayHUD(const sf::Vector2u& winSize);
+    void configureStoreHUD(const sf::Vector2u& winSize);
+    void refreshHUDContent(GameState currentState, bool menuVisible, bool shopOpen, const sf::Vector2u& winSize, const Player& localPlayer);
 
+private:
     sf::Font& m_font;
     std::unordered_map<std::string, HUDElement> m_elements;
 
-    // Draws a plain white background covering the entire window
     void drawWhiteBackground(sf::RenderWindow& window);
-
-    // Checks if the mouse is over the text bounding box
     bool isMouseOverText(const sf::RenderWindow& window, const sf::Text& text);
 };
 

@@ -14,6 +14,7 @@ private:
     void ProcessEvents(const sf::Event& event);
     sf::RectangleShape createLobbyButton;  // Clickable area for "Create Lobby"
     sf::RectangleShape searchLobbiesButton; // Clickable area for "Search Lobbies"
+    sf::RectangleShape exitGameButton;
 };
 
 #endif // MAINMENUSTATE_H

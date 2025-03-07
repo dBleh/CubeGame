@@ -16,3 +16,4 @@ void SteamManager::SendPlayerUpdate(CubeGame* game) {
              game->GetLocalPlayer().health);
     SteamMatchmaking()->SendLobbyChatMsg(game->GetLobbyID(), buffer, strlen(buffer) + 1);
 }
+

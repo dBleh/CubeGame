@@ -1,73 +1,193 @@
 #include "LobbyState.h"
-
+#include "..//Utils/RoundedRectangleShape.hpp"
+#include <iostream>
+#include <algorithm>
+#include <Steam/steam_api.h>
 
 LobbyState::LobbyState(CubeGame* game)
     : State(game)
 {
-    // Create the HUD elements for the Lobby
-    // (Using white text so they show against the black background in Render().)
-    game->GetHUD().addElement(
-        "lobbyStatus",
-        "",                           // Content will be set dynamically
-        24,                           // Character size
-        sf::Vector2f(10.f, 10.f),     // Position (ScreenSpace)
-        GameState::Lobby,            // Visible in the Lobby state
-        HUD::RenderMode::ScreenSpace, // prefix with HUD::
-        false                         // Not hoverable
-    );
-    game->GetHUD().updateBaseColor("lobbyStatus", sf::Color::White);
+    //
+    // 1) HEADER BAR ACROSS THE TOP
+    //
+    std::string lobbyName = SteamMatchmaking()->GetLobbyData(game->GetLobbyID(), "name");
+    if (lobbyName.empty()) {
+        lobbyName = "Lobby";
+    }
 
+    // Centered header text near the top
+    game->GetHUD().addElement(
+         "lobbyHeader",
+         lobbyName,
+         32, 
+         sf::Vector2f(SCREEN_WIDTH * 0.5f, 20.f),
+         GameState::Lobby,
+         HUD::RenderMode::ScreenSpace,
+         true
+    );
+    game->GetHUD().updateBaseColor("lobbyHeader", sf::Color::White);
+
+    //
+    // 2) CREATE 12 PLACEHOLDERS IN A 3×4 GRID
+    //
+    const int rows = 4;
+    const int cols = 3;
+    const float slotWidth  = 220.f;
+    const float slotHeight = 60.f;
+    const float spacing    = 40.f;
+
+    float totalWidth  = cols * slotWidth + (cols - 1) * spacing;
+    float totalHeight = rows * slotHeight + (rows - 1) * spacing;
+
+    float xStart = (SCREEN_WIDTH  - totalWidth ) * 0.5f;
+    float yStart = 120.f; // gap below header
+
+    int slotIndex = 0;
+    for (int r = 0; r < rows; ++r)
+    {
+        for (int c = 0; c < cols; ++c)
+        {
+            float xPos = xStart + c * (slotWidth + spacing);
+            float yPos = yStart + r * (slotHeight + spacing);
+
+            // 2a) Slot background
+            sf::RectangleShape& rect = m_playerSlotRects[slotIndex];
+            rect.setSize(sf::Vector2f(slotWidth, slotHeight));
+            rect.setFillColor(sf::Color(100, 149, 237)); // CornflowerBlue
+            rect.setOutlineColor(sf::Color::Black);
+            rect.setOutlineThickness(2.f);
+            rect.setPosition(xPos, yPos);
+
+            // 2b) Name text element (top line)
+            {
+                std::string nameId = "playerNameSlot" + std::to_string(slotIndex);
+                float nameX = xPos + slotWidth  * 0.3f;
+                float nameY = yPos + slotHeight * 0.3f; // 30% from top
+
+                game->GetHUD().addElement(
+                    nameId,
+                    "Empty", 
+                    22,
+                    sf::Vector2f(nameX, nameY),
+                    GameState::Lobby,
+                    HUD::RenderMode::ScreenSpace,
+                    true
+                );
+                game->GetHUD().updateBaseColor(nameId, sf::Color::Black);
+            }
+
+            // 2c) Ready status text element (bottom line)
+            {
+                std::string readyId = "playerReadySlot" + std::to_string(slotIndex);
+                float readyX = xPos + slotWidth  * 0.3f;
+                float readyY = yPos + slotHeight * 0.6f; // 60% from top
+
+                game->GetHUD().addElement(
+                    readyId,
+                    "",  // will be "Ready"/"Not Ready"
+                    20,  // slightly smaller
+                    sf::Vector2f(readyX, readyY),
+                    GameState::Lobby,
+                    HUD::RenderMode::ScreenSpace,
+                    true
+                );
+                game->GetHUD().updateBaseColor(readyId, sf::Color::Black);
+            }
+
+            ++slotIndex;
+        }
+    }
+
+    //
+    // 3) PROMPTS NEAR THE BOTTOM
+    //
     game->GetHUD().addElement(
         "startGame",
-        "",                           // Content will be set dynamically
+        "",
         24,
-        sf::Vector2f(10.f, 40.f),
+        sf::Vector2f(SCREEN_WIDTH * 0.5f, SCREEN_HEIGHT - 100.f),
         GameState::Lobby,
-        HUD::RenderMode::ScreenSpace, // prefix with HUD::
-        false
+        HUD::RenderMode::ScreenSpace,
+        true
     );
-    game->GetHUD().updateBaseColor("startGame", sf::Color::White);
+    game->GetHUD().updateBaseColor("startGame", sf::Color::Black);
 
     game->GetHUD().addElement(
         "returnMain",
-        "",                           // Content will be set dynamically
+        "",
         24,
-        sf::Vector2f(10.f, 70.f),
+        sf::Vector2f(SCREEN_WIDTH * 0.5f, SCREEN_HEIGHT - 60.f),
         GameState::Lobby,
-        HUD::RenderMode::ScreenSpace, // prefix with HUD::
-        false
+        HUD::RenderMode::ScreenSpace,
+        true
     );
-    game->GetHUD().updateBaseColor("returnMain", sf::Color::White);
+    game->GetHUD().updateBaseColor("returnMain", sf::Color::Black);
 }
-
+bool LobbyState::IsFullyLoaded() {
+    return (
+        game->GetEntityManager()->areEntitiesInitialized() &&
+        game->GetNetworkManager()->isInitialized() &&
+        game->GetNetworkManager()->isLoaded() &&
+        game->GetHUD().isFullyLoaded() &&
+        game->GetWindow().isOpen()
+    );
+}
 void LobbyState::Update(float dt)
 {
     UpdateLobbyMembers();
-
-    size_t readyCount = std::count_if(
-        game->GetPlayers().begin(),
-        game->GetPlayers().end(),
-        [](const auto& p) {
-            return p.second.ready;
+    if (!game->IsHost() && IsFullyLoaded() && !loadedMessageSent) {
+        loadedMessageSent = true;
+        std::string loadedMsg = "PLAYER_LOADED|" + std::to_string(game->GetLocalPlayer().steamID.ConvertToUint64());
+        const char* hostStr = SteamMatchmaking()->GetLobbyData(game->GetLobbyID(), "host_steam_id");
+        if (hostStr && *hostStr) {
+            CSteamID hostID(std::stoull(hostStr));
+            game->GetNetworkManager()->sendMessage(hostID, loadedMsg);
+            std::cout << "[DEBUG] Client sent PLAYER_LOADED message to host: " << loadedMsg << "\n";
         }
-    );
+    }
+    //
+    // Assign up to 12 players to the 12 slots
+    //
+    int i = 0;
+    for (auto& playerPair : game->GetPlayers())
+    {
+        if (i >= 12) break;
 
-    // Update the lobby status text
-    std::string lobbyInfo = "Lobby - Players: " + std::to_string(game->GetPlayers().size()) + 
-                            "\nReady: " + std::to_string(readyCount);
-    game->GetHUD().updateText("lobbyStatus", lobbyInfo);
+        const auto& player = playerPair.second;
+        const char* steamName = (SteamFriends())
+                              ? SteamFriends()->GetFriendPersonaName(player.steamID)
+                              : "Unknown";
 
-    // Explicitly control "startGame" and "returnMain" visibility via text
+        // Name text
+        std::string nameId = "playerNameSlot" + std::to_string(i);
+        game->GetHUD().updateText(nameId, steamName);
+
+        // Ready status text
+        std::string readyId = "playerReadySlot" + std::to_string(i);
+        game->GetHUD().updateText(readyId, player.ready ? "Ready" : "Not Ready");
+
+        ++i;
+    }
+
+    // Any remaining slots become "Empty" with no ready state
+    for (; i < 12; ++i)
+    {
+        std::string nameId  = "playerNameSlot"  + std::to_string(i);
+        std::string readyId = "playerReadySlot" + std::to_string(i);
+        game->GetHUD().updateText(nameId,  "Empty");
+        game->GetHUD().updateText(readyId, "");
+    }
+
+    //
+    // Host vs Non-Host prompts
+    //
     if (game->GetLocalPlayer().steamID == SteamMatchmaking()->GetLobbyOwner(game->GetLobbyID()))
     {
-        // Host gets the "Start Game" prompt
         game->GetHUD().updateText("startGame", "Press S to Start Game (Host Only)");
-        // You could also choose to always show "returnMain" if you wish
-        game->GetHUD().updateText("returnMain", "");
+        game->GetHUD().updateText("returnMain", "Press M to Return to Main Menu");
     }
     else
     {
-        // Non-host sees a blank for "startGame" and a prompt to go back
         game->GetHUD().updateText("startGame", "");
         game->GetHUD().updateText("returnMain", "Press M to Return to Main Menu");
     }
@@ -75,23 +195,37 @@ void LobbyState::Update(float dt)
 
 void LobbyState::Render()
 {
-    // Clear the screen with black so white text is visible
-    game->GetWindow().clear(sf::Color::Black);
+    // Clear to white
+    game->GetWindow().clear(sf::Color::White);
 
-    // Draw each player's shape (as before)
+    // Draw any in-world player shapes if you have them
     for (const auto& player : game->GetPlayers()) {
         game->GetWindow().draw(player.second.shape);
     }
 
-    // Example: draw a simple rectangle in the lobby
-    sf::RectangleShape lobbyIndicator(sf::Vector2f(200.f, 50.f));
-    lobbyIndicator.setFillColor(sf::Color::Yellow);
-    lobbyIndicator.setPosition(SCREEN_WIDTH / 2.f - 100.f, 100.f);
-    game->GetWindow().draw(lobbyIndicator);
+    // Reset view for UI
+    game->GetWindow().setView(game->GetWindow().getDefaultView());
 
-    // Render the HUD on top
-    game->RenderHUDLayer();
+    //
+    // Header bar
+    //
+    sf::RectangleShape headerBar;
+    headerBar.setSize(sf::Vector2f(SCREEN_WIDTH, 60.f));
+    headerBar.setFillColor(sf::Color(70, 130, 180)); // steel blue
+    headerBar.setPosition(0.f, 0.f);
+    game->GetWindow().draw(headerBar);
 
+    //
+    // Draw the 12 slot rectangles
+    //
+    for (auto& rect : m_playerSlotRects) {
+        game->GetWindow().draw(rect);
+    }
+
+    // Draw the HUD (text elements)
+    game->GetHUD().render(game->GetWindow(), game->GetWindow().getDefaultView(), game->GetCurrentState());
+
+    // Display
     game->GetWindow().display();
 }
 
@@ -111,24 +245,22 @@ void LobbyState::ProcessEvents(const sf::Event& event)
         else if (event.key.code == sf::Keyboard::S &&
                  game->GetLocalPlayer().steamID == SteamMatchmaking()->GetLobbyOwner(game->GetLobbyID()))
         {
-            std::cout << "[DEBUG] Host pressed S. Players: " << game->GetPlayers().size() 
-                      << ", All ready: " << (AllPlayersReady() ? "Yes" : "No") << std::endl;
-
-            // Allow start if single-player OR (multiplayer and everyone is ready OR game was already played)
-            if (game->GetPlayers().size() <= 1 ||
-               (game->GetPlayers().size() > 1 && (AllPlayersReady() || game->HasGameBeenPlayed())))
+            if(game->GetPlayersAreLoaded()==false){
+                std::cout << "[DEBUG] Not all players are loaded \n";
+            }
+            else if (game->GetPlayers().size() <= 1 ||
+                (game->GetPlayers().size() > 1 && (AllPlayersReady() || game->HasGameBeenPlayed())))
             {
                 game->StartGame();
             }
             else
             {
-                std::cout << "[DEBUG] Cannot start: Multiple players not all ready" << std::endl;
+                std::cout << "[DEBUG] Cannot start: multiple players not all ready\n";
             }
         }
         else if (event.key.code == sf::Keyboard::M)
         {
             game->ReturnToMainMenu();
-            std::cout << "[DEBUG] Returning to main menu from lobby" << std::endl;
         }
     }
 }
@@ -139,7 +271,7 @@ void LobbyState::UpdateLobbyMembers()
 
     int memberCount = SteamMatchmaking()->GetNumLobbyMembers(game->GetLobbyID());
 
-    // Add any new players
+    // Add new players if not already in the list
     for (int i = 0; i < memberCount; ++i)
     {
         CSteamID member = SteamMatchmaking()->GetLobbyMemberByIndex(game->GetLobbyID(), i);
@@ -149,16 +281,14 @@ void LobbyState::UpdateLobbyMembers()
             p.initialize();
             p.steamID = member;
             game->GetPlayers()[member] = p;
-            std::cout << "[DEBUG] Added player: " << member.ConvertToUint64() << std::endl;
         }
 
-        // Update ready state from lobby data
         const char* readyState = SteamMatchmaking()->GetLobbyMemberData(
-                                     game->GetLobbyID(), member, "ready");
+                                    game->GetLobbyID(), member, "ready");
         game->GetPlayers()[member].ready = (readyState && std::string(readyState) == "1");
     }
 
-    // Remove players who left
+    // Remove any that left the lobby
     for (auto it = game->GetPlayers().begin(); it != game->GetPlayers().end();)
     {
         bool found = false;
@@ -172,8 +302,6 @@ void LobbyState::UpdateLobbyMembers()
         }
         if (!found)
         {
-            std::cout << "[DEBUG] Removed stale player: " 
-                      << it->first.ConvertToUint64() << std::endl;
             it = game->GetPlayers().erase(it);
         }
         else

@@ -12,6 +12,11 @@ public:
 
 private:
     void ProcessEvents(const sf::Event& event);
+    void UpdateLobbyListDisplay(); // New method to update HUD with lobby list
+    void SearchLobbies();
+    void JoinLobby(CSteamID lobby);
+    void JoinLobbyByIndex(int index);
+
 };
 
 #endif // LOBBYSEARCHSTATE_H

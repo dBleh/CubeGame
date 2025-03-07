@@ -11,55 +11,80 @@ void Enemy::initialize(Type t) {
     attackCooldown = 0.0f;
 
     switch (type) {
-        case Swarmlet:
-            shape.setSize(sf::Vector2f(10.0f, 10.0f));
-            shape.setFillColor(sf::Color::Green);
-            health = 10;
-            x = static_cast<float>(rand() % SCREEN_WIDTH);
-            y = static_cast<float>(rand() % SCREEN_HEIGHT);
-            break;
-        case Sniper:
-            shape.setSize(sf::Vector2f(15.0f, 15.0f));
-            shape.setFillColor(sf::Color::Magenta);
-            health = 40;
-            x = static_cast<float>(rand() % SCREEN_WIDTH);
-            y = static_cast<float>(rand() % SCREEN_HEIGHT);
-            attackCooldown = 3.0f; // Fires every 3s
-            break;
-        case Bomber:
-            shape.setSize(sf::Vector2f(20.0f, 20.0f));
-            shape.setFillColor(sf::Color::Yellow);
-            health = 30;
-            x = static_cast<float>(rand() % SCREEN_WIDTH);
-            y = static_cast<float>(rand() % SCREEN_HEIGHT);
-            break;
-        case Brute:
+        case Splitter:
             shape.setSize(sf::Vector2f(30.0f, 30.0f));
-            shape.setFillColor(sf::Color(139, 0, 0)); // Dark red
-            health = 100;
+            shape.setFillColor(sf::Color::Cyan);
+            health = 20;
             x = static_cast<float>(rand() % SCREEN_WIDTH);
             y = static_cast<float>(rand() % SCREEN_HEIGHT);
+            splitTimer = splitInterval = 10.0f;
+            shakeTimer = 0.f;
+            shakeDuration = 2.0f;
             break;
-        case GravityWell:
-            shape.setSize(sf::Vector2f(30.0f, 30.0f));
-            shape.setFillColor(sf::Color::Black);
-            health = 80;
-            x = static_cast<float>(rand() % SCREEN_WIDTH);
-            y = static_cast<float>(rand() % SCREEN_HEIGHT);
-            pullRadius = 100.0f;
-            break;
-        case Default: // Original enemy
+        case Default:
         default:
             shape.setSize(sf::Vector2f(20.0f, 20.0f));
             shape.setFillColor(sf::Color::Red);
-            health = 50;
+            health = 10;
             x = static_cast<float>(rand() % SCREEN_WIDTH);
             y = static_cast<float>(rand() % SCREEN_HEIGHT);
             break;
     }
     renderedX = x;
     renderedY = y;
+    lastX = x;
+    lastY = y;
+    interpolationTime = 0.f;
     shape.setPosition(x, y);
+}
+
+void Enemy::update(float dt) {
+    if (spawnDelay > 0) {
+        spawnDelay -= dt;
+        if (spawnDelay <= 0) {
+            spawnDelay = 0;
+            renderedX = x;
+            renderedY = y;
+        }
+    }
+
+    if (health > 0) {
+        if (type == Splitter) {
+            updateSplitter(dt);
+        }
+
+        float interpFactor = std::min(30.0f * dt, 1.0f);
+        renderedX += (x - renderedX) * interpFactor;
+        renderedY += (y - renderedY) * interpFactor;
+        shape.setPosition(renderedX, renderedY);
+    } else {
+        shape.setPosition(renderedX, renderedY);
+    }
+
+    if (type == Sniper && attackCooldown > 0) {
+        attackCooldown -= dt;
+    }
+}
+
+void Enemy::updateSplitter(float dt) {
+    splitTimer -= dt;
+
+    if (splitTimer <= shakeDuration && !isSplitting) {
+        isSplitting = true;
+        shakeTimer = shakeDuration;
+    }
+
+    if (isSplitting) {
+        shakeTimer -= dt;
+        if (shakeTimer > 0) {
+            float shakeX = (rand() % 10 - 5) * (shakeTimer / shakeDuration);
+            float shakeY = (rand() % 10 - 5) * (shakeTimer / shakeDuration);
+            shape.setPosition(renderedX + shakeX, renderedY + shakeY);
+        } else {
+            isSplitting = false;
+            // Color change happens in EntityManager before destruction
+        }
+    }
 }
 
 bool Enemy::move(float dt, float targetX, float targetY) {
@@ -105,36 +130,4 @@ bool Enemy::move(float dt, float targetX, float targetY) {
         return directionChanged;
     }
     return false;
-}
-
-void Enemy::update(float dt) {
-    if (spawnDelay > 0) {
-        spawnDelay -= dt;
-        if (spawnDelay <= 0) {
-            spawnDelay = 0;
-            renderedX = x;
-            renderedY = y;
-        }
-    }
-
-    if (health > 0) {
-        float interpFactor = std::min(30.0f * dt, 1.0f);
-        float oldRenderedX = renderedX, oldRenderedY = renderedY;
-        renderedX += (x - renderedX) * interpFactor;
-        renderedY += (y - renderedY) * interpFactor;
-        shape.setPosition(renderedX, renderedY);
-
-        float dx = x - renderedX;
-        float dy = y - renderedY;
-        if (std::abs(dx) > 10 || std::abs(dy) > 10) {
-            std::cout << "[DEBUG] Enemy jump: (" << dx << ", " << dy << ") from (" << oldRenderedX << ", " << oldRenderedY << ") to (" << renderedX << ", " << renderedY << ")" << std::endl;
-        }
-    } else {
-        shape.setPosition(renderedX, renderedY);
-    }
-
-    // Sniper attack cooldown
-    if (type == Sniper && attackCooldown > 0) {
-        attackCooldown -= dt;
-    }
 }
