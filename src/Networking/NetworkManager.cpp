@@ -188,14 +188,13 @@ void NetworkManager::HandlePlayerLoaded(const std::string& msg) {
         game->playerLoadedStatus[CSteamID(steamID)] = true;
     }
 }
-
 void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
     std::vector<std::string> parts;
     std::stringstream ss(msg);
     std::string part;
     while (std::getline(ss, part, '|')) parts.push_back(part);
 
-    if (parts[0] != "P" || parts.size() < 11) { // Expect at least 11 fields for full format
+    if (parts[0] != "P" || parts.size() < 11) {
         std::cout << "[DEBUG] Invalid player update (too few fields): " << msg << "\n";
         return;
     }
@@ -212,37 +211,39 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
     }
     Player& p = game->entityManager->getPlayers()[id];
 
-    // Skip updates for local player’s position
+    // Skip position updates for local player
     if (id != game->localSteamID) {
         p.lastX = p.x;
         p.lastY = p.y;
+        p.x = std::stof(parts[2]);
+        p.y = std::stof(parts[3]);
+        p.renderedX = std::stof(parts[4]);
+        p.renderedY = std::stof(parts[5]);
     }
 
     try {
         if (!isKeyValue) {
-            p.x = std::stof(parts[2]);
-            p.y = std::stof(parts[3]);
-            p.renderedX = std::stof(parts[4]);
-            p.renderedY = std::stof(parts[5]);
-            p.health = std::stoi(parts[6]);
-            p.kills = std::stoi(parts[7]);
+            // Only update health, kills, and money for remote players
+            if (id != game->localSteamID) {
+                p.health = std::stoi(parts[6]);
+                p.kills = std::stoi(parts[7]);
+                p.money = std::stoi(parts[9]);
+            }
             p.ready = std::stoi(parts[8]) != 0;
-            p.money = std::stoi(parts[9]);
             p.speed = std::stof(parts[10]);
             p.isAlive = std::stoi(parts[11]) != 0;
             std::cout << "[DEBUG] Parsed player update for " << id.ConvertToUint64()
                       << ": Kills=" << p.kills << ", Money=" << p.money << "\n";
         } else {
-            // Handle key-value format if needed
             for (size_t i = startIdx; i + 1 < parts.size(); i += 2) {
-                if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
-                else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
-                else if (parts[i] == "rx") p.renderedX = std::stof(parts[i + 1]);
-                else if (parts[i] == "ry") p.renderedY = std::stof(parts[i + 1]);
-                else if (parts[i] == "h") p.health = std::stoi(parts[i + 1]);
-                else if (parts[i] == "k") p.kills = std::stoi(parts[i + 1]);
+                if (parts[i] == "x" && id != game->localSteamID) p.x = std::stof(parts[i + 1]);
+                else if (parts[i] == "y" && id != game->localSteamID) p.y = std::stof(parts[i + 1]);
+                else if (parts[i] == "rx" && id != game->localSteamID) p.renderedX = std::stof(parts[i + 1]);
+                else if (parts[i] == "ry" && id != game->localSteamID) p.renderedY = std::stof(parts[i + 1]);
+                else if (parts[i] == "h" && id != game->localSteamID) p.health = std::stoi(parts[i + 1]);
+                else if (parts[i] == "k" && id != game->localSteamID) p.kills = std::stoi(parts[i + 1]);
                 else if (parts[i] == "r") p.ready = std::stoi(parts[i + 1]) != 0;
-                else if (parts[i] == "m") p.money = std::stoi(parts[i + 1]);
+                else if (parts[i] == "m" && id != game->localSteamID) p.money = std::stoi(parts[i + 1]);
                 else if (parts[i] == "s") p.speed = std::stof(parts[i + 1]);
                 else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]);
             }
