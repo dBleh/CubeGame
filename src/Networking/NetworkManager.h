@@ -62,6 +62,7 @@ public:
     void BroadcastEnemyDeath(uint64_t enemyId, CSteamID killerID);
     void HandleEnemyRemove(const std::string& msg);
 private:
+    std::map<CSteamID, uint64_t> m_lastPlayerUpdateTime;
     struct NetworkStats {
         size_t bytesSent = 0;
         size_t bytesReceived = 0;

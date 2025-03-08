@@ -1,4 +1,5 @@
 #include "EntityManager.h"
+#include "CubeGame.h"
 #include <cmath>
 #include <random>
 #include <limits>
@@ -262,24 +263,30 @@ void EntityManager::spawnEnemies(int enemiesPerWave, const std::unordered_map<CS
 //-------------------------------------------------------------------------
 // Interpolate Entities
 //-------------------------------------------------------------------------
-void EntityManager::interpolateEntities(float alpha) {
-    const float fixedDt = 1.0f / 60.0f; // Match the fixed timestep
-    updateEntities(fixedDt); // Update logic with fixed timestep
+void EntityManager::interpolateEntities(float alpha, CubeGame* game) {
+    const float fixedDt = 1.0f / 60.0f;
+    updateEntities(fixedDt);
 
-    // Interpolate for rendering
     for (auto& [id, player] : m_players) {
-        player.renderedX = player.lastX + (player.x - player.lastX) * alpha;
-        player.renderedY = player.lastY + (player.y - player.lastY) * alpha;
+        if (id == game->GetLocalPlayer().steamID) {
+            // Local player: Use current position directly, no interpolation
+            player.renderedX = player.x;
+            player.renderedY = player.y;
+        } else {
+            // Remote players: Interpolate
+            player.renderedX = player.lastX + (player.x - player.lastX) * alpha;
+            player.renderedY = player.lastY + (player.y - player.lastY) * alpha;
+        }
         player.shape.setPosition(player.renderedX, player.renderedY);
-    }
-    for (auto& [id, enemy] : m_enemies) {
-        enemy.renderedX = enemy.lastX + (enemy.x - enemy.lastX) * alpha;
-        enemy.renderedY = enemy.lastY + (enemy.y - enemy.lastY) * alpha;
     }
     for (auto& [id, bullet] : m_bullets) {
         bullet.renderedX = bullet.lastX + (bullet.x - bullet.lastX) * alpha;
         bullet.renderedY = bullet.lastY + (bullet.y - bullet.lastY) * alpha;
         bullet.shape.setPosition(bullet.renderedX, bullet.renderedY);
+    }
+    for (auto& [id, enemy] : m_enemies) {
+        enemy.renderedX = enemy.lastX + (enemy.x - enemy.lastX) * alpha;
+        enemy.renderedY = enemy.lastY + (enemy.y - enemy.lastY) * alpha;
     }
 }
 

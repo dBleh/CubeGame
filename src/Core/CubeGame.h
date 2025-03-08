@@ -213,7 +213,7 @@ private:
     //--------------------------------------------------------------------------
     NetworkManager* networkManager = nullptr;
     EntityManager* entityManager = nullptr;
-
+    std::unique_ptr<EntityManager> entityManagerPtr;
     //--------------------------------------------------------------------------
     // Private Helper Methods
     //--------------------------------------------------------------------------

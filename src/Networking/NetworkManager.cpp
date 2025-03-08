@@ -195,17 +195,14 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
     std::string part;
     while (std::getline(ss, part, '|')) parts.push_back(part);
 
-    if (parts[0] != "P" || parts.size() < 3) return;
-
-    CSteamID id;
-    size_t startIdx = 1;
-    if (parts[1] == "D") {
-        id = CSteamID(std::stoull(parts[2]));
-        startIdx = 3;
-    } else {
-        id = CSteamID(std::stoull(parts[1]));
-        startIdx = 2;
+    if (parts[0] != "P" || parts.size() < 11) { // Expect at least 11 fields for full format
+        std::cout << "[DEBUG] Invalid player update (too few fields): " << msg << "\n";
+        return;
     }
+
+    bool isKeyValue = (parts[1] == "D");
+    size_t startIdx = isKeyValue ? 3 : 2;
+    CSteamID id = CSteamID(std::stoull(parts[isKeyValue ? 2 : 1]));
 
     if (game->entityManager->getPlayers().count(id) == 0) {
         Player newPlayer;
@@ -215,58 +212,62 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
     }
     Player& p = game->entityManager->getPlayers()[id];
 
+    // Skip updates for local player’s position
     if (id != game->localSteamID) {
-        PlayerState& state = m_playerStates[id];
-        state.lastX = p.renderedX;
-        state.lastY = p.renderedY;
-        state.interpolationClock.restart();
+        p.lastX = p.x;
+        p.lastY = p.y;
     }
 
-    for (size_t i = startIdx; i < parts.size(); i += (startIdx == 2 ? 1 : 2)) {
-        if (startIdx == 2) { // Full format: "P|<steamID>|x|...|k|<kills>|..."
-            if (i == 1) continue; // Skip steamID
-            if (i == 2) p.x = std::stof(parts[i]);
-            else if (i == 3) p.y = std::stof(parts[i]);
-            else if (i == 4) p.renderedX = std::stof(parts[i]);
-            else if (i == 5) p.renderedY = std::stof(parts[i]);
-            else if (i == 6) p.health = std::stoi(parts[i]);
-            else if (i == 7) p.kills = std::stoi(parts[i]);
-            else if (i == 8) p.ready = std::stoi(parts[i]) != 0;
-            else if (i == 9) p.money = std::stoi(parts[i]);
-            else if (i == 10) p.speed = std::stof(parts[i]);
-            else if (i == 11) p.isAlive = std::stoi(parts[i]) != 0;
-        } else { // Key-value format: "P|D|<steamID>|k|<kills>|m|<money>|..."
-            if (i + 1 >= parts.size()) break;
-            if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
-            else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
-            else if (parts[i] == "rx") {
-                p.renderedX = std::stof(parts[i + 1]);
-                if (id != game->localSteamID) m_playerStates[id].targetX = p.renderedX;
+    try {
+        if (!isKeyValue) {
+            p.x = std::stof(parts[2]);
+            p.y = std::stof(parts[3]);
+            p.renderedX = std::stof(parts[4]);
+            p.renderedY = std::stof(parts[5]);
+            p.health = std::stoi(parts[6]);
+            p.kills = std::stoi(parts[7]);
+            p.ready = std::stoi(parts[8]) != 0;
+            p.money = std::stoi(parts[9]);
+            p.speed = std::stof(parts[10]);
+            p.isAlive = std::stoi(parts[11]) != 0;
+            std::cout << "[DEBUG] Parsed player update for " << id.ConvertToUint64()
+                      << ": Kills=" << p.kills << ", Money=" << p.money << "\n";
+        } else {
+            // Handle key-value format if needed
+            for (size_t i = startIdx; i + 1 < parts.size(); i += 2) {
+                if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
+                else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
+                else if (parts[i] == "rx") p.renderedX = std::stof(parts[i + 1]);
+                else if (parts[i] == "ry") p.renderedY = std::stof(parts[i + 1]);
+                else if (parts[i] == "h") p.health = std::stoi(parts[i + 1]);
+                else if (parts[i] == "k") p.kills = std::stoi(parts[i + 1]);
+                else if (parts[i] == "r") p.ready = std::stoi(parts[i + 1]) != 0;
+                else if (parts[i] == "m") p.money = std::stoi(parts[i + 1]);
+                else if (parts[i] == "s") p.speed = std::stof(parts[i + 1]);
+                else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]);
             }
-            else if (parts[i] == "ry") {
-                p.renderedY = std::stof(parts[i + 1]);
-                if (id != game->localSteamID) m_playerStates[id].targetY = p.renderedY;
-            }
-            else if (parts[i] == "h") p.health = std::stoi(parts[i + 1]);
-            else if (parts[i] == "k") p.kills = std::stoi(parts[i + 1]);
-            else if (parts[i] == "r") p.ready = std::stoi(parts[i + 1]) != 0;
-            else if (parts[i] == "m") p.money = std::stoi(parts[i + 1]);
-            else if (parts[i] == "s") p.speed = std::stof(parts[i + 1]);
-            else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]) != 0;
         }
+    } catch (const std::exception& e) {
+        std::cout << "[DEBUG] Error parsing update: " << msg << " (" << e.what() << ")\n";
+        return;
+    }
+
+    if (id != game->localSteamID) {
+        std::cout << "[DEBUG] Updated remote player " << id.ConvertToUint64()
+                  << " to (" << p.x << ", " << p.y << "), Kills: " << p.kills << ", Money: " << p.money << "\n";
     }
 }
 void NetworkManager::HandleEnemySpawn(const std::string& msg) {
     uint64_t enemyID, timestamp;
     float x, y, spawnDelay;
     int health, type;
-    int parsed = sscanf(msg.c_str(), "E|SPAWN|%llu|%f|%f|%d|%f|%d|%llu", 
+    int parsed = sscanf(msg.c_str(), "E|SPAWN|%llu|%f|%f|%d|%f|%d|%llu",
                         &enemyID, &x, &y, &health, &spawnDelay, &type, &timestamp);
-    if (parsed == 7) { // Now expecting 7 parameters
-        if (game->entityManager->getEnemies().count(enemyID) == 0 || 
+    if (parsed == 7) {
+        if (game->entityManager->getEnemies().count(enemyID) == 0 ||
             (m_lastEnemyUpdateTime.count(enemyID) && m_lastEnemyUpdateTime[enemyID] < timestamp)) {
             auto& newEnemy = game->entityManager->getEnemies().emplace(enemyID, Enemy()).first->second;
-            newEnemy.initialize(static_cast<Enemy::Type>(type)); // Use the received type
+            newEnemy.initialize(static_cast<Enemy::Type>(type));
             newEnemy.id = enemyID;
             newEnemy.x = x;
             newEnemy.y = y;
@@ -274,11 +275,13 @@ void NetworkManager::HandleEnemySpawn(const std::string& msg) {
             newEnemy.spawnDelay = spawnDelay;
             newEnemy.renderedX = x;
             newEnemy.renderedY = y;
-            newEnemy.lastSentX = x;
-            newEnemy.lastSentY = y;
-            newEnemy.interpolationTime = INTERPOLATION_TIME;
+            newEnemy.lastX = x;
+            newEnemy.lastY = y;
             m_lastEnemyUpdateTime[enemyID] = timestamp;
+            std::cout << "[DEBUG] Client spawned enemy " << enemyID << " at (" << x << ", " << y << ")\n";
         }
+    } else {
+        std::cout << "[DEBUG] Failed to parse enemy spawn: " << msg << "\n";
     }
 }
 
@@ -348,11 +351,10 @@ void NetworkManager::HandleEnemyRemove(const std::string& msg) {
     if (sscanf(msg.c_str(), "E|REMOVE|%llu", &enemyID) == 1) {
         if (game->entityManager->getEnemies().count(enemyID)) {
             game->entityManager->getEnemies().erase(enemyID);
-            std::cout << "[DEBUG] Removed enemy " << enemyID << " from client" << std::endl;
+            std::cout << "[DEBUG] Removed enemy " << enemyID << " from client\n";
         }
     }
 }
-
 void NetworkManager::HandleHit(const std::string& msg, CSteamID sender) {
     uint64_t bulletId, enemyId, shooterSteamID, timestamp;
     int damage;
@@ -361,25 +363,29 @@ void NetworkManager::HandleHit(const std::string& msg, CSteamID sender) {
     }
 
     if (game->m_isHost) {
-        if (game->entityManager->getEnemies().count(enemyId) > 0) {
+        if (game->entityManager->getEnemies().count(enemyId)) {
             Enemy& e = game->entityManager->getEnemies()[enemyId];
             if (!m_lastEnemyUpdateTime.count(enemyId) || m_lastEnemyUpdateTime[enemyId] < timestamp) {
                 e.health -= damage;
                 m_lastEnemyUpdateTime[enemyId] = timestamp;
-                
-                CSteamID shooterID(shooterSteamID);
+
                 if (e.health <= 0) {
-                    // Update player stats
-                    if (game->entityManager->getPlayers().count(shooterID) > 0) {
-                        Player& p = game->entityManager->getPlayers()[shooterID];
-                        p.kills++;
-                        p.money += 10;
+                    // Update the shooter's stats
+                    CSteamID shooterID(shooterSteamID);
+                    if (game->entityManager->getPlayers().count(shooterID)) {
+                        Player& shooter = game->entityManager->getPlayers()[shooterID];
+                        shooter.kills += 1;    // Increment kills
+                        shooter.money += 10;   // Reward money (adjust value as needed)
+                        std::cout << "[DEBUG] Player " << shooterSteamID << " killed enemy " << enemyId
+                                  << ". Kills: " << shooter.kills << ", Money: " << shooter.money << "\n";
+
                         // Broadcast updated player state
-                        std::string playerUpdateMsg = game->FormatPlayerUpdate(p);
-                        if (!playerUpdateMsg.empty()) {
-                            broadcastMessage(playerUpdateMsg);
+                        std::string playerUpdate = game->FormatPlayerUpdate(shooter);
+                        if (!playerUpdate.empty()) {
+                            broadcastMessage(playerUpdate);
                         }
                     }
+
                     // Broadcast enemy removal
                     char buffer[64];
                     int bytes = snprintf(buffer, sizeof(buffer), "E|REMOVE|%llu", enemyId);
@@ -387,26 +393,7 @@ void NetworkManager::HandleHit(const std::string& msg, CSteamID sender) {
                         broadcastMessage(std::string(buffer));
                     }
                     game->entityManager->getEnemies().erase(enemyId);
-                } else {
-                    // Broadcast updated enemy state
-                    char buffer[128];
-                    int bytes = snprintf(buffer, sizeof(buffer), "E|UPDATE|%llu|%.1f|%.1f|%d|%.2f|%llu",
-                                        enemyId, e.x, e.y, e.health, e.spawnDelay, timestamp);
-                    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
-                        broadcastMessage(std::string(buffer));
-                    }
                 }
-                // Remove bullet on hit
-                game->entityManager->getBullets().erase(bulletId);
-            }
-        }
-    } else {
-        // Client-side: Queue hit if enemy not found
-        if (!game->entityManager->getEnemies().count(enemyId)) {
-            GameplayState* gameplayState = game->GetGameplayState();
-            if (gameplayState) {
-                gameplayState->pendingHits.push_back({bulletId, enemyId, shooterSteamID, 0.5f});
-                std::cout << "[DEBUG] Client queued hit for enemy " << enemyId << " (not found yet)" << std::endl;
             }
         }
     }
@@ -557,7 +544,6 @@ void NetworkManager::SpawnEnemiesAndBroadcast() {
         }
     }
 }
-
 void NetworkManager::SyncEnemies() {
     if (!game->m_isHost) return;
     

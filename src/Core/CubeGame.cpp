@@ -56,8 +56,12 @@ std::string CubeGame::FormatPlayerUpdate(const Player& p) {
                          "P|%llu|%.1f|%.1f|%.1f|%.1f|%d|%d|%d|%d|%.1f|%d",
                          p.steamID.ConvertToUint64(), p.x, p.y, p.renderedX, p.renderedY,
                          p.health, p.kills, p.ready ? 1 : 0, p.money, p.speed, p.isAlive ? 1 : 0);
-    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer))
-        return std::string(buffer);
+    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
+        std::string result(buffer);
+        std::cout << "[DEBUG] Formatted player update: " << result << "\n";
+        return result;
+    }
+    std::cerr << "[ERROR] Failed to format player update for " << p.steamID.ConvertToUint64() << "\n";
     return "";
 }
 

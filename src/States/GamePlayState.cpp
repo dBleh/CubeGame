@@ -87,7 +87,7 @@ void GameplayState::Update(float dt) {
 
 void GameplayState::Interpolate(float alpha) {
     // Interpolate entity positions for rendering
-    game->GetEntityManager()->interpolateEntities(alpha); // Pass alpha instead of dt
+    game->GetEntityManager()->interpolateEntities(alpha, game); // Pass alpha instead of dt
 }
 
 //---------------------------------------------------------

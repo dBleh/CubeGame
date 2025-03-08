@@ -60,9 +60,11 @@ public:
     //-------------------------------------------------------------------------
     void setEnemyUpdateCallback(std::function<void(const std::string&)> callback); ///< Sets the enemy update callback.
     bool areEntitiesInitialized() const; ///< Returns true if there is at least one player.
-    void interpolateEntities(float dt);  ///< Interpolates positions for smooth rendering.
+    void interpolateEntities(float alpha, CubeGame* game);  ///< Interpolates positions for smooth rendering.
+    
 
 private:
+    CubeGame* game;
     //-------------------------------------------------------------------------
     // Spatial Collision Grid
     //-------------------------------------------------------------------------
