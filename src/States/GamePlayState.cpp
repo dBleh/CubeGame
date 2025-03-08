@@ -132,7 +132,10 @@ void GameplayState::UpdatePlayingState(float dt) {
         }
         // Allow shooting on left mouse click.
         if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
-            game->GetLocalPlayer().ShootBullet(game);
+            Player& updatedLocalPlayer = game->GetLocalPlayer(); // Ensure latest state
+            if (updatedLocalPlayer.isAlive) {
+                updatedLocalPlayer.ShootBullet(game);
+            }
         }
     }
 
@@ -146,40 +149,57 @@ void GameplayState::UpdatePlayingState(float dt) {
             snprintf(hitBuffer, sizeof(hitBuffer), "H|%llu|%llu|%llu|%d|%llu",
                      b.id, enemyId, game->GetLocalPlayer().steamID.ConvertToUint64(), damage, timestamp);
             game->GetNetworkManager()->SendGameplayMessage(std::string(hitBuffer));
-    
-            // Client-side prediction: Reduce enemy health only, no stats update
-            if (!game->IsHost() && game->GetEnemies().count(enemyId)) {
+
+            if (game->IsHost() && game->GetEnemies().count(enemyId)) {
                 Enemy& enemy = game->GetEnemies()[enemyId];
                 enemy.health -= damage;
                 if (enemy.health <= 0) {
                     game->GetEntityManager()->getEnemies().erase(enemyId);
-                    Player& localPlayer = game->GetLocalPlayer();
-                    localPlayer.kills += 1;
-                    localPlayer.money += 10;
+                    Player& shooter = game->GetLocalPlayer();
+                    shooter.kills += 1;
+                    shooter.money += 10;
+                    localPlayer = shooter; // Update local reference
+                    // Broadcast specific kill/money update
+                    char buffer[128];
+                    int bytes = snprintf(buffer, sizeof(buffer), "P|D|%llu|k|%d|m|%d",
+                                         shooter.steamID.ConvertToUint64(), shooter.kills, shooter.money);
+                    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
+                        game->GetNetworkManager()->broadcastMessage(std::string(buffer));
+                    }
+                    // Broadcast enemy removal
+                    bytes = snprintf(buffer, sizeof(buffer), "E|REMOVE|%llu", enemyId);
+                    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
+                        game->GetNetworkManager()->broadcastMessage(std::string(buffer));
+                    }
+                }
+            } else if (!game->IsHost() && game->GetEnemies().count(enemyId)) {
+                Enemy& enemy = game->GetEnemies()[enemyId];
+                enemy.health -= damage;
+                if (enemy.health <= 0) {
+                    game->GetEntityManager()->getEnemies().erase(enemyId);
                     std::cout << "[DEBUG] Client predicted kill for " << localPlayer.steamID.ConvertToUint64()
-                              << ". Kills: " << localPlayer.kills << ", Money: " << localPlayer.money << "\n";
+                              << ", awaiting host confirmation.\n";
                 }
             }
         },
-        // Lambda for enemy-player collision.
         [&](CSteamID playerId, uint64_t enemyId) {
             if (game->GetPlayers().count(playerId)) {
                 Player& player = game->GetPlayers()[playerId];
-                if (player.isAlive && game->IsHost()) { // Only host processes damage
+                if (player.isAlive && game->IsHost()) {
                     player.health -= 10;
                     if (player.health <= 0) {
                         player.isAlive = false;
                     }
-                    // Send specific health/alive update
                     char buffer[128];
                     int bytes = snprintf(buffer, sizeof(buffer), "P|D|%llu|h|%d|a|%d",
                                          player.steamID.ConvertToUint64(), player.health, player.isAlive ? 1 : 0);
                     if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                         game->GetNetworkManager()->broadcastMessage(std::string(buffer));
                     }
-                    game->GetPlayers()[playerId] = player; // Update local copy
+                    game->GetPlayers()[playerId] = player;
                     if (playerId == game->GetLocalPlayer().steamID) {
-                        game->GetLocalPlayer() = player; // Update local player if affected
+                        game->GetLocalPlayer() = player;
+                        localPlayer = player; // Update local reference
                     }
                 }
             }
@@ -208,7 +228,6 @@ void GameplayState::UpdatePlayingState(float dt) {
         }
     }
 }
-
 
 //---------------------------------------------------------
 // Process Event
