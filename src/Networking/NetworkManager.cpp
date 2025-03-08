@@ -194,14 +194,30 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
     std::string part;
     while (std::getline(ss, part, '|')) parts.push_back(part);
 
-    if (parts[0] != "P" || parts.size() < 11) {
+    std::cout << "[DEBUG] Handling player update: " << msg << ", parts.size() = " << parts.size() << "\n";
+
+    // Validate minimum parts for any player update
+    if (parts.empty() || parts[0] != "P") {
+        std::cout << "[DEBUG] Invalid player update (no parts or not 'P'): " << msg << "\n";
+        return;
+    }
+
+    bool isKeyValue = (parts.size() > 1 && parts[1] == "D");
+    size_t minParts = isKeyValue ? 3 : 12; // Key-value needs at least 3, full needs 12
+    if (parts.size() < minParts) {
         std::cout << "[DEBUG] Invalid player update (too few fields): " << msg << "\n";
         return;
     }
 
-    bool isKeyValue = (parts[1] == "D");
-    size_t startIdx = isKeyValue ? 3 : 2;
-    CSteamID id = CSteamID(std::stoull(parts[isKeyValue ? 2 : 1]));
+    // Safely get SteamID
+    size_t idIndex = isKeyValue ? 2 : 1;
+    CSteamID id;
+    try {
+        id = CSteamID(std::stoull(parts[idIndex]));
+    } catch (const std::exception& e) {
+        std::cout << "[DEBUG] Failed to parse SteamID from " << parts[idIndex] << ": " << e.what() << "\n";
+        return;
+    }
 
     if (game->entityManager->getPlayers().count(id) == 0) {
         Player newPlayer;
@@ -215,10 +231,12 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
     if (id != game->localSteamID) {
         p.lastX = p.x;
         p.lastY = p.y;
-        p.x = std::stof(parts[2]);
-        p.y = std::stof(parts[3]);
-        p.renderedX = std::stof(parts[4]);
-        p.renderedY = std::stof(parts[5]);
+        if (!isKeyValue) {
+            p.x = std::stof(parts[2]);
+            p.y = std::stof(parts[3]);
+            p.renderedX = std::stof(parts[4]);
+            p.renderedY = std::stof(parts[5]);
+        }
     }
 
     try {
@@ -235,7 +253,8 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
             std::cout << "[DEBUG] Parsed player update for " << id.ConvertToUint64()
                       << ": Kills=" << p.kills << ", Money=" << p.money << "\n";
         } else {
-            for (size_t i = startIdx; i + 1 < parts.size(); i += 2) {
+            size_t i = 3; // Start after "P|D|<steamID>"
+            while (i + 1 < parts.size()) {
                 if (parts[i] == "x" && id != game->localSteamID) p.x = std::stof(parts[i + 1]);
                 else if (parts[i] == "y" && id != game->localSteamID) p.y = std::stof(parts[i + 1]);
                 else if (parts[i] == "rx" && id != game->localSteamID) p.renderedX = std::stof(parts[i + 1]);
@@ -246,6 +265,7 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
                 else if (parts[i] == "m" && id != game->localSteamID) p.money = std::stoi(parts[i + 1]);
                 else if (parts[i] == "s") p.speed = std::stof(parts[i + 1]);
                 else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]);
+                i += 2;
             }
         }
     } catch (const std::exception& e) {
