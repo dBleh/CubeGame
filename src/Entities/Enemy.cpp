@@ -151,7 +151,7 @@ bool Enemy::move(float dt, float targetX, float targetY) {
             break;
         case Default:
         default:
-            speed = 100.0f;
+            speed = 50.0f;
             break;
     }
 

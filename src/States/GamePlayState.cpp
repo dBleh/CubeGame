@@ -148,7 +148,6 @@ void GameplayState::UpdatePlayingState(float dt) {
 
     // Check for collisions between bullets and enemies, and between players and enemies.
     game->GetEntityManager()->checkCollisions(
-        // Lambda for bullet-enemy collision.
         [&](const Bullet& b, uint64_t enemyId) {
             uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::system_clock::now().time_since_epoch()).count();
@@ -157,8 +156,8 @@ void GameplayState::UpdatePlayingState(float dt) {
             snprintf(hitBuffer, sizeof(hitBuffer), "H|%llu|%llu|%llu|%d|%llu",
                      b.id, enemyId, game->GetLocalPlayer().steamID.ConvertToUint64(), damage, timestamp);
             game->GetNetworkManager()->SendGameplayMessage(std::string(hitBuffer));
-
-            // Client-side prediction: if enemy exists, reduce health locally.
+    
+            // Client-side prediction: Reduce enemy health only, no stats update
             if (!game->IsHost() && game->GetEnemies().count(enemyId)) {
                 Enemy& enemy = game->GetEnemies()[enemyId];
                 enemy.health -= damage;

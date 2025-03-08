@@ -1,6 +1,6 @@
-^C:\USERS\DUNCA\DESKTOP\PROJECTS\CUBEGAME\BUILD\CMAKEFILES\949E414F2DCEF87F38490C8852C26F94\GENERATE.STAMP.RULE
+^C:\USERS\DUNCA\DESKTOP\GAME\BUILD\CMAKEFILES\F3DA142CA8279C27FEBF808A6989E1A1\GENERATE.STAMP.RULE
 setlocal
-"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/dunca/Desktop/Projects/CubeGame -BC:/Users/dunca/Desktop/Projects/CubeGame/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/dunca/Desktop/Projects/CubeGame/build/CubeShooter.sln
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SC:/Users/dunca/Desktop/Game -BC:/Users/dunca/Desktop/Game/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/dunca/Desktop/Game/build/CubeShooter.sln
 if %errorlevel% neq 0 goto :cmEnd
 :cmEnd
 endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone

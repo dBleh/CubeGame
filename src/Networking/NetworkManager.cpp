@@ -195,24 +195,47 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
     std::string part;
     while (std::getline(ss, part, '|')) parts.push_back(part);
 
-    if (parts[0] == "P" && parts[1] == "D" && parts.size() >= 3) {
-        CSteamID id(std::stoull(parts[2]));
-        if (game->entityManager->getPlayers().count(id) == 0) {
-            Player newPlayer;
-            newPlayer.initialize();
-            newPlayer.steamID = id;
-            game->entityManager->getPlayers()[id] = newPlayer;
-        }
-        Player& p = game->entityManager->getPlayers()[id];
-        
-        if (id != game->localSteamID) {
-            PlayerState& state = m_playerStates[id];
-            state.lastX = p.renderedX;
-            state.lastY = p.renderedY;
-            state.interpolationClock.restart();
-        }
-        
-        for (size_t i = 3; i < parts.size(); i += 2) {
+    if (parts[0] != "P" || parts.size() < 3) return;
+
+    CSteamID id;
+    size_t startIdx = 1;
+    if (parts[1] == "D") {
+        id = CSteamID(std::stoull(parts[2]));
+        startIdx = 3;
+    } else {
+        id = CSteamID(std::stoull(parts[1]));
+        startIdx = 2;
+    }
+
+    if (game->entityManager->getPlayers().count(id) == 0) {
+        Player newPlayer;
+        newPlayer.initialize();
+        newPlayer.steamID = id;
+        game->entityManager->getPlayers()[id] = newPlayer;
+    }
+    Player& p = game->entityManager->getPlayers()[id];
+
+    if (id != game->localSteamID) {
+        PlayerState& state = m_playerStates[id];
+        state.lastX = p.renderedX;
+        state.lastY = p.renderedY;
+        state.interpolationClock.restart();
+    }
+
+    for (size_t i = startIdx; i < parts.size(); i += (startIdx == 2 ? 1 : 2)) {
+        if (startIdx == 2) { // Full format: "P|<steamID>|x|...|k|<kills>|..."
+            if (i == 1) continue; // Skip steamID
+            if (i == 2) p.x = std::stof(parts[i]);
+            else if (i == 3) p.y = std::stof(parts[i]);
+            else if (i == 4) p.renderedX = std::stof(parts[i]);
+            else if (i == 5) p.renderedY = std::stof(parts[i]);
+            else if (i == 6) p.health = std::stoi(parts[i]);
+            else if (i == 7) p.kills = std::stoi(parts[i]);
+            else if (i == 8) p.ready = std::stoi(parts[i]) != 0;
+            else if (i == 9) p.money = std::stoi(parts[i]);
+            else if (i == 10) p.speed = std::stof(parts[i]);
+            else if (i == 11) p.isAlive = std::stoi(parts[i]) != 0;
+        } else { // Key-value format: "P|D|<steamID>|k|<kills>|m|<money>|..."
             if (i + 1 >= parts.size()) break;
             if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
             else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
@@ -232,18 +255,19 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
             else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]) != 0;
         }
     }
+    std::cout << "[DEBUG] Updated player " << id.ConvertToUint64() << ": kills=" << p.kills << ", money=" << p.money << std::endl;
 }
-
 void NetworkManager::HandleEnemySpawn(const std::string& msg) {
     uint64_t enemyID, timestamp;
     float x, y, spawnDelay;
-    int health;
-    int parsed = sscanf(msg.c_str(), "E|SPAWN|%llu|%f|%f|%d|%f|%llu", &enemyID, &x, &y, &health, &spawnDelay, &timestamp);
-    if (parsed == 6) {
+    int health, type;
+    int parsed = sscanf(msg.c_str(), "E|SPAWN|%llu|%f|%f|%d|%f|%d|%llu", 
+                        &enemyID, &x, &y, &health, &spawnDelay, &type, &timestamp);
+    if (parsed == 7) { // Now expecting 7 parameters
         if (game->entityManager->getEnemies().count(enemyID) == 0 || 
             (m_lastEnemyUpdateTime.count(enemyID) && m_lastEnemyUpdateTime[enemyID] < timestamp)) {
             auto& newEnemy = game->entityManager->getEnemies().emplace(enemyID, Enemy()).first->second;
-            newEnemy.initialize(Enemy::Splitter); // Assume Splitter for split spawns
+            newEnemy.initialize(static_cast<Enemy::Type>(type)); // Use the received type
             newEnemy.id = enemyID;
             newEnemy.x = x;
             newEnemy.y = y;
@@ -351,7 +375,11 @@ void NetworkManager::HandleHit(const std::string& msg, CSteamID sender) {
                         Player& p = game->entityManager->getPlayers()[shooterID];
                         p.kills++;
                         p.money += 10;
-                        SendPlayerUpdate();
+                        // Broadcast updated player state
+                        std::string playerUpdateMsg = game->FormatPlayerUpdate(p);
+                        if (!playerUpdateMsg.empty()) {
+                            broadcastMessage(playerUpdateMsg);
+                        }
                     }
                     // Broadcast enemy removal
                     char buffer[64];
@@ -374,7 +402,7 @@ void NetworkManager::HandleHit(const std::string& msg, CSteamID sender) {
             }
         }
     } else {
-        // Client-side: Notify GameplayState if enemy not found
+        // Client-side: Queue hit if enemy not found
         if (!game->entityManager->getEnemies().count(enemyId)) {
             GameplayState* gameplayState = game->GetGameplayState();
             if (gameplayState) {
@@ -520,8 +548,9 @@ void NetworkManager::SpawnEnemiesAndBroadcast() {
     for (const auto& pair : game->GetEntityManager()->getEnemies()) {
         const Enemy& enemy = pair.second;
         char buffer[128];
-        int bytes = snprintf(buffer, sizeof(buffer), "E|SPAWN|%llu|%.1f|%.1f|%d|%.2f|%llu",
-                            enemy.id, enemy.x, enemy.y, enemy.health, enemy.spawnDelay, timestamp);
+        int bytes = snprintf(buffer, sizeof(buffer), "E|SPAWN|%llu|%.1f|%.1f|%d|%.2f|%d|%llu",
+                             enemy.id, enemy.x, enemy.y, enemy.health, enemy.spawnDelay,
+                             static_cast<int>(enemy.type), timestamp);
         if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
             broadcastMessage(std::string(buffer));
             m_lastEnemyUpdateTime[enemy.id] = timestamp;

@@ -146,38 +146,34 @@ float CubeGame::GetDeltaTime() const {
 //--------------------------------------
 void CubeGame::Run() {
     sf::Clock clock;
+    const float fixedDt = 1.0f / 60.0f; // 60 FPS fixed timestep
+    float accumulator = 0.0f;
 
     while (window.isOpen()) {
-        // Process network messages.
         networkManager->processCallbacks();
         networkManager->receiveMessages();
 
-        // Calculate delta time and cap dt to prevent huge frame jumps.
-        float dt = clock.restart().asSeconds();
-        deltaTime = dt;
-        dt = std::min(dt, 0.033f);
+        float frameTime = clock.restart().asSeconds();
+        deltaTime = frameTime; // For rendering or other uncapped uses
+        accumulator += frameTime;
 
-        // Host synchronizes enemy data at fixed intervals.
-        if (m_isHost) {
-            enemySyncTimer += dt;
-            if (enemySyncTimer >= ENEMY_SYNC_INTERVAL) {
-                networkManager->SyncEnemies();
-                enemySyncTimer = 0.0f;
+        while (accumulator >= fixedDt) {
+            if (m_isHost) {
+                enemySyncTimer += fixedDt;
+                if (enemySyncTimer >= ENEMY_SYNC_INTERVAL) {
+                    networkManager->SyncEnemies();
+                    enemySyncTimer = 0.0f;
+                }
             }
+            if (shootCooldown > 0) shootCooldown -= fixedDt;
+            if (state) state->Update(fixedDt); // Use fixedDt for game logic
+            accumulator -= fixedDt;
         }
 
-        // Update shooting cooldown.
-        if (shootCooldown > 0) {
-            shootCooldown -= dt;
-            if (shootCooldown < 0) shootCooldown = 0;
-        }
-
-        // Process window events.
         sf::Event event;
         while (window.pollEvent(event)) {
             ProcessEvents(event);
-            if (state)
-                state->ProcessEvent(event);
+            if (state) state->ProcessEvent(event);
         }
 
         // State management: create new state if current state has changed.
@@ -212,7 +208,7 @@ void CubeGame::Run() {
 
         // Update and render the current state.
         if (state) {
-            state->Update(dt);
+            state->Update(fixedDt);
             if (state && currentState == GetCurrentState()) {
                 state->Render();
             }
@@ -428,13 +424,14 @@ void CubeGame::StartGame() {
             std::chrono::system_clock::now().time_since_epoch()).count();
 
         for (auto& [eid, enemy] : entityManager->getEnemies()) {
-            enemy.spawnDelay = CubeGame::INITIAL_WAVE_DELAY;
-            char buffer[128];
-            int bytes = snprintf(buffer, sizeof(buffer),
-                                 "E|SPAWN|%llu|%.1f|%.1f|%d|%.2f|%llu",
-                                 eid, enemy.x, enemy.y, enemy.health, enemy.spawnDelay, timestamp);
-            if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
-                networkManager->broadcastMessage(std::string(buffer)); // Consistent use of broadcast.
+                enemy.spawnDelay = CubeGame::INITIAL_WAVE_DELAY;
+                char buffer[128];
+                int bytes = snprintf(buffer, sizeof(buffer),
+                                     "E|SPAWN|%llu|%.1f|%.1f|%d|%.2f|%d|%llu",
+                                     eid, enemy.x, enemy.y, enemy.health, enemy.spawnDelay,
+                                     static_cast<int>(enemy.type), timestamp);
+                if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
+                    networkManager->broadcastMessage(std::string(buffer));
             }
         }
     }

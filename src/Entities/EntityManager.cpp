@@ -113,18 +113,19 @@ void EntityManager::updateEntities(float dt) {
                             // Network update for the new enemy
                             uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
                                 std::chrono::system_clock::now().time_since_epoch()).count();
-                            char buffer[128];
-                            int bytes = snprintf(buffer, sizeof(buffer), "E|SPAWN|%llu|%.1f|%.1f|%d|%.2f|%llu",
-                                                 newId, newEnemy.x, newEnemy.y, newEnemy.health, newEnemy.spawnDelay, timestamp);
-                            if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer) && onEnemyUpdate)
-                                onEnemyUpdate(std::string(buffer));
-
-                            // Network update for the modified original enemy
-                            char origBuffer[128];
-                            int origBytes = snprintf(origBuffer, sizeof(origBuffer), "E|UPDATE|%llu|%.1f|%.1f|%d|%.2f|%llu",
-                                                     enemy.id, enemy.x, enemy.y, enemy.health, enemy.spawnDelay, timestamp);
-                            if (origBytes > 0 && static_cast<size_t>(origBytes) < sizeof(origBuffer) && onEnemyUpdate)
-                                onEnemyUpdate(std::string(origBuffer));
+                                char buffer[128];
+                                int bytes = snprintf(buffer, sizeof(buffer), "E|SPAWN|%llu|%.1f|%.1f|%d|%.2f|%d|%llu",
+                                                    newId, newEnemy.x, newEnemy.y, newEnemy.health, newEnemy.spawnDelay,
+                                                    static_cast<int>(newEnemy.type), timestamp);
+                                if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer) && onEnemyUpdate)
+                                    onEnemyUpdate(std::string(buffer));
+                            
+                                char origBuffer[128];
+                                int origBytes = snprintf(origBuffer, sizeof(origBuffer), "E|UPDATE|%llu|%.1f|%.1f|%d|%.2f|%d|%llu",
+                                                         enemy.id, enemy.x, enemy.y, enemy.health, enemy.spawnDelay,
+                                                         static_cast<int>(enemy.type), timestamp); // Added type
+                                if (origBytes > 0 && static_cast<size_t>(origBytes) < sizeof(origBuffer) && onEnemyUpdate)
+                                    onEnemyUpdate(std::string(origBuffer));
                         }
 
                         // Move enemy toward nearest player
