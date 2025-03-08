@@ -153,6 +153,11 @@ void GameplayState::UpdatePlayingState(float dt) {
                 enemy.health -= damage;
                 if (enemy.health <= 0) {
                     game->GetEntityManager()->getEnemies().erase(enemyId);
+                    Player& localPlayer = game->GetLocalPlayer();
+                    localPlayer.kills += 1;
+                    localPlayer.money += 10;
+                    std::cout << "[DEBUG] Client predicted kill for " << localPlayer.steamID.ConvertToUint64()
+                              << ". Kills: " << localPlayer.kills << ", Money: " << localPlayer.money << "\n";
                 }
             }
         },
