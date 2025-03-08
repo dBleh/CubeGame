@@ -211,30 +211,46 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
     }
     Player& p = game->entityManager->getPlayers()[id];
 
-    // If this is the local player, only update position unless explicitly told to update stats
+    std::cout << "[DEBUG] Client received player update: " << msg << "\n";
+
     if (id == game->localSteamID) {
         if (!isKeyValue) {
-            // Full update for local player: only update position, not stats
+            // Full update: only apply position for local player, stats come from key-value updates
             p.lastX = p.x;
             p.lastY = p.y;
             p.x = std::stof(parts[2]);
             p.y = std::stof(parts[3]);
             p.renderedX = std::stof(parts[4]);
             p.renderedY = std::stof(parts[5]);
-            // Do NOT overwrite health, kills, money, etc. here
         } else {
-            // Key-value update: only apply specific fields if intended
+            // Key-value update: apply specific fields from host
             size_t i = 3;
             while (i + 1 < parts.size()) {
                 if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
-            else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
-            else if (parts[i] == "rx") p.renderedX = std::stof(parts[i + 1]);
-            else if (parts[i] == "ry") p.renderedY = std::stof(parts[i + 1]);
-            else if (parts[i] == "h" && game->m_isHost) p.health = std::stoi(parts[i + 1]);
-            else if (parts[i] == "a" && game->m_isHost) p.isAlive = std::stoi(parts[i + 1]);
-            else if (parts[i] == "k") p.kills = std::stoi(parts[i + 1]); // Allow kill updates from host
-            else if (parts[i] == "m") p.money = std::stoi(parts[i + 1]); // Allow money updates from host
+                else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
+                else if (parts[i] == "rx") p.renderedX = std::stof(parts[i + 1]);
+                else if (parts[i] == "ry") p.renderedY = std::stof(parts[i + 1]);
+                else if (parts[i] == "h") {
+                    p.health = std::stoi(parts[i + 1]);
+                    std::cout << "[DEBUG] Client updated health for " << id.ConvertToUint64() << " to " << p.health << "\n";
+                }
+                else if (parts[i] == "a") {
+                    p.isAlive = std::stoi(parts[i + 1]) != 0;
+                    std::cout << "[DEBUG] Client updated alive status for " << id.ConvertToUint64() << " to " << p.isAlive << "\n";
+                }
+                else if (parts[i] == "k") {
+                    p.kills = std::stoi(parts[i + 1]);
+                    std::cout << "[DEBUG] Client updated kills for " << id.ConvertToUint64() << " to " << p.kills << "\n";
+                }
+                else if (parts[i] == "m") {
+                    p.money = std::stoi(parts[i + 1]);
+                    std::cout << "[DEBUG] Client updated money for " << id.ConvertToUint64() << " to " << p.money << "\n";
+                }
                 i += 2;
+            }
+            // Update local player reference
+            if (id == game->localSteamID) {
+                game->localPlayer = p; // Ensure localPlayer reflects the updated state
             }
         }
     } else {
@@ -260,11 +276,11 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
                 else if (parts[i] == "rx") p.renderedX = std::stof(parts[i + 1]);
                 else if (parts[i] == "ry") p.renderedY = std::stof(parts[i + 1]);
                 else if (parts[i] == "h") p.health = std::stoi(parts[i + 1]);
+                else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]) != 0;
                 else if (parts[i] == "k") p.kills = std::stoi(parts[i + 1]);
                 else if (parts[i] == "m") p.money = std::stoi(parts[i + 1]);
                 else if (parts[i] == "r") p.ready = std::stoi(parts[i + 1]) != 0;
                 else if (parts[i] == "s") p.speed = std::stof(parts[i + 1]);
-                else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]);
                 i += 2;
             }
             p.lastX = p.x;
@@ -373,7 +389,7 @@ void NetworkManager::HandleEnemyRemove(const std::string& msg) {
 void NetworkManager::HandleHit(const std::string& msg, CSteamID sender) {
     uint64_t bulletId, enemyId, shooterSteamID, timestamp;
     int damage;
-    if (sscanf(msg.c_str(), "H|%llu|%llu|%llu|%d|%llu", &bulletId, &enemyId, &shooterSteamID, &damage, &timestamp) != 5) {
+    if (sscanf(msg.c_str(), "H|%llu|%llu|%llu|%d|%llu", &bulletId, &enemyId, &shooterSteamID, &damage, ×tamp) != 5) {
         std::cout << "[DEBUG] Failed to parse hit message: " << msg << "\n";
         return;
     }
@@ -392,15 +408,14 @@ void NetworkManager::HandleHit(const std::string& msg, CSteamID sender) {
                         shooter.kills += 1;
                         shooter.money += 10;
 
-                        // Send specific kill/money update for the shooter
                         char buffer[128];
                         int bytes = snprintf(buffer, sizeof(buffer), "P|D|%llu|k|%d|m|%d",
                                              shooterSteamID, shooter.kills, shooter.money);
                         if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                             broadcastMessage(std::string(buffer));
+                            std::cout << "[DEBUG] Host broadcasted kill update: P|D|" << shooterSteamID << "|k|" << shooter.kills << "|m|" << shooter.money << "\n";
                         }
 
-                        // Broadcast enemy removal
                         bytes = snprintf(buffer, sizeof(buffer), "E|REMOVE|%llu", enemyId);
                         if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                             broadcastMessage(std::string(buffer));
