@@ -165,30 +165,21 @@ void GameplayState::UpdatePlayingState(float dt) {
         [&](CSteamID playerId, uint64_t enemyId) {
             if (game->GetPlayers().count(playerId)) {
                 Player& player = game->GetPlayers()[playerId];
-                if (player.isAlive) {
+                if (player.isAlive && game->IsHost()) { // Only host processes damage
                     player.health -= 10;
                     if (player.health <= 0) {
                         player.isAlive = false;
-                        std::cout << "[DEBUG] Player " << playerId.ConvertToUint64() << " died" << std::endl;
-                        // Send updated player state to network.
-                        char buffer[256];
-                        int bytes = snprintf(buffer, sizeof(buffer),
-                                             "P|%llu|%.1f|%.1f|%.1f|%.1f|%d|%d|%d|%d|%.1f|%d",
-                                             player.steamID.ConvertToUint64(), player.x, player.y,
-                                             player.renderedX, player.renderedY, player.health,
-                                             player.kills, player.ready ? 1 : 0, player.money, player.speed, player.isAlive ? 1 : 0);
-                        if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
-                            if (game->IsHost()) {
-                                game->GetNetworkManager()->broadcastMessage(std::string(buffer));
-                            } else {
-                                const char* hostStr = SteamMatchmaking()->GetLobbyData(game->GetCurrentLobby(), "host_steam_id");
-                                if (hostStr && *hostStr) {
-                                    CSteamID hostID(std::stoull(hostStr));
-                                    game->GetNetworkManager()->sendMessage(hostID, std::string(buffer));
-                                }
-                            }
-                        }
-                        game->GetLocalPlayer() = player;
+                    }
+                    // Send specific health/alive update
+                    char buffer[128];
+                    int bytes = snprintf(buffer, sizeof(buffer), "P|D|%llu|h|%d|a|%d",
+                                         player.steamID.ConvertToUint64(), player.health, player.isAlive ? 1 : 0);
+                    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
+                        game->GetNetworkManager()->broadcastMessage(std::string(buffer));
+                    }
+                    game->GetPlayers()[playerId] = player; // Update local copy
+                    if (playerId == game->GetLocalPlayer().steamID) {
+                        game->GetLocalPlayer() = player; // Update local player if affected
                     }
                 }
             }
