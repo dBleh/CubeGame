@@ -389,7 +389,7 @@ void NetworkManager::HandleEnemyRemove(const std::string& msg) {
 void NetworkManager::HandleHit(const std::string& msg, CSteamID sender) {
     uint64_t bulletId, enemyId, shooterSteamID, timestamp;
     int damage;
-    if (sscanf(msg.c_str(), "H|%llu|%llu|%llu|%d|%llu", &bulletId, &enemyId, &shooterSteamID, &damage, ×tamp) != 5) {
+    if (sscanf(msg.c_str(), "H|%llu|%llu|%llu|%d|%llu", &bulletId, &enemyId, &shooterSteamID, &damage, &timestamp) != 5) {
         std::cout << "[DEBUG] Failed to parse hit message: " << msg << "\n";
         return;
     }
