@@ -389,7 +389,7 @@ void NetworkManager::HandleEnemyRemove(const std::string& msg) {
 void NetworkManager::HandleHit(const std::string& msg, CSteamID sender) {
     uint64_t bulletId, enemyId, shooterSteamID, timestamp;
     int damage;
-    if (sscanf(msg.c_str(), "H|%llu|%llu|%llu|%d|%llu", &bulletId, &enemyId, &shooterSteamID, &damage, &timestamp) != 5) {
+    if (sscanf(msg.c_str(), "H|%llu|%llu|%llu|%d|%llu", &bulletId, &enemyId, &shooterSteamID, &damage, ×tamp) != 5) {
         std::cout << "[DEBUG] Failed to parse hit message: " << msg << "\n";
         return;
     }
@@ -408,14 +408,20 @@ void NetworkManager::HandleHit(const std::string& msg, CSteamID sender) {
                         shooter.kills += 1;
                         shooter.money += 10;
 
+                        // Ensure the updated player is saved back to the map
+                        game->entityManager->getPlayers()[shooterID] = shooter;
+
+                        // Broadcast the kill/money update
                         char buffer[128];
                         int bytes = snprintf(buffer, sizeof(buffer), "P|D|%llu|k|%d|m|%d",
                                              shooterSteamID, shooter.kills, shooter.money);
                         if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                             broadcastMessage(std::string(buffer));
-                            std::cout << "[DEBUG] Host broadcasted kill update: P|D|" << shooterSteamID << "|k|" << shooter.kills << "|m|" << shooter.money << "\n";
+                            std::cout << "[DEBUG] Host broadcasted kill update: P|D|" << shooterSteamID 
+                                      << "|k|" << shooter.kills << "|m|" << shooter.money << "\n";
                         }
 
+                        // Broadcast enemy removal
                         bytes = snprintf(buffer, sizeof(buffer), "E|REMOVE|%llu", enemyId);
                         if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                             broadcastMessage(std::string(buffer));
