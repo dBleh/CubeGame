@@ -47,6 +47,7 @@ public:
 
     /// Update enemy vertex data for batch rendering.
     void updateEnemyVertices();
+    void Interpolate(float alpha) override; // Add interpolation method
 
     /// Start the next level timer.
     void StartNextLevelTimer(float duration);

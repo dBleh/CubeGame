@@ -16,6 +16,8 @@ public:
      */
     State(CubeGame* game) : game(game) {}
     virtual ~State() = default;
+    virtual void Interpolate(float alpha) = 0;
+
 
     /// Update the state logic.
     virtual void Update(float dt) = 0;

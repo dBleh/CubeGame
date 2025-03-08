@@ -139,3 +139,6 @@ void LobbySearchState::JoinLobbyByIndex(int index) {
         game->GetHUD().updateText("searchStatus", "Invalid lobby selection");
     }
 }
+void LobbySearchState::Interpolate(float alpha) {
+    // No interpolation needed for a static lobby search screen
+}

@@ -33,12 +33,11 @@ GameplayState::GameplayState(CubeGame* game)
 // Update Function
 //---------------------------------------------------------
 void GameplayState::Update(float dt) {
-    // Host handles network messages and level progression.
+    // Logic updates with fixed dt (e.g., 1/60s)
     if (game->IsHost()) {
         game->GetNetworkManager()->receiveMessages();
         CheckAndAdvanceLevel();
 
-        // Timer for next level wave.
         if (nextLevelTimer > 0) {
             nextLevelTimer -= dt;
             static float lastTimerSync = 0.0f;
@@ -56,17 +55,14 @@ void GameplayState::Update(float dt) {
                 timerActive = false;
                 if (game->IsHost()) {
                     game->GetNetworkManager()->SpawnEnemiesAndBroadcast();
-                    std::cout << "[DEBUG] Host spawned next wave" << std::endl;
                 }
             }
         }
 
-        // Check if all players are dead; if so, transition to GameOver.
+        // Check for game over
         bool allDead = std::all_of(game->GetPlayers().begin(), game->GetPlayers().end(),
             [](const auto& pair) { return !pair.second.isAlive; });
-        
         if (allDead && game->GetCurrentState() != GameState::GameOver) {
-            std::cout << "[DEBUG] All players dead, transitioning to GameOver" << std::endl;
             game->SetCurrentState(GameState::GameOver);
             char gameOverBuffer[32];
             int goBytes = snprintf(gameOverBuffer, sizeof(gameOverBuffer), "S|GAMEOVER");
@@ -77,27 +73,21 @@ void GameplayState::Update(float dt) {
         }
     }
 
-    // Update HUD elements.
-    sf::Vector2u winSize = game->GetWindow().getSize();
-    game->GetHUD().refreshHUDContent(game->GetCurrentState(), menuVisible, shopOpen, winSize, game->GetLocalPlayer());
-
-    // Update playing state if not in pause menu.
-    if (game->GetCurrentState() == GameState::Playing) {
-        if (!menuVisible) {
-            UpdatePlayingState(dt);
-        }
+    // Update playing state logic
+    if (game->GetCurrentState() == GameState::Playing && !menuVisible) {
+        UpdatePlayingState(dt);
     }
 
-    // Interpolate entity positions.
-    game->GetEntityManager()->interpolateEntities(dt);
+    // Update HUD content (logic, not rendering)
+    sf::Vector2u winSize = game->GetWindow().getSize();
+    game->GetHUD().refreshHUDContent(game->GetCurrentState(), menuVisible, shopOpen, winSize, game->GetLocalPlayer());
+    game->GetHUD().refreshGameInfo(winSize, game->GetCurrentLevel(), game->GetEnemies().size(),
+                                   game->GetLocalPlayer(), nextLevelTimer, game->GetPlayers());
+}
 
-    // Refresh game info on HUD (level, enemy count, etc.).
-    game->GetHUD().refreshGameInfo(winSize,
-                               game->GetCurrentLevel(),
-                               game->GetEnemies().size(),
-                               game->GetLocalPlayer(),
-                               nextLevelTimer,
-                               game->GetPlayers());
+void GameplayState::Interpolate(float alpha) {
+    // Interpolate entity positions for rendering
+    game->GetEntityManager()->interpolateEntities(alpha); // Pass alpha instead of dt
 }
 
 //---------------------------------------------------------

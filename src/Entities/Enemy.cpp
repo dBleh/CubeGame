@@ -59,28 +59,16 @@ void Enemy::initialize(Type t) {
  * @param dt Delta time (time elapsed since the last update).
  */
 void Enemy::update(float dt) {
-    // Process spawn delay.
+    lastX = x; // Store previous position
+    lastY = y;
     if (spawnDelay > 0) {
         spawnDelay -= dt;
-        if (spawnDelay <= 0) {
-            spawnDelay = 0;
-            // Reset rendered position once the enemy spawns.
-            renderedX = x;
-            renderedY = y;
-        }
+        if (spawnDelay <= 0) spawnDelay = 0;
     }
-    // If enemy is alive, update movement interpolation.
-    if (health > 0) {
-        if (type == Splitter) {
-            updateSplitter(dt);
-        }
-        float interpFactor = std::min(30.0f * dt, 1.0f);
-        renderedX += (x - renderedX) * interpFactor;
-        renderedY += (y - renderedY) * interpFactor;
+    if (health > 0 && type == Splitter) {
+        updateSplitter(dt);
     }
-
 }
-
 /**
  * @brief Special update routine for Splitter enemies.
  *

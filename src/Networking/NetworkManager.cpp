@@ -255,7 +255,6 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
             else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]) != 0;
         }
     }
-    std::cout << "[DEBUG] Updated player " << id.ConvertToUint64() << ": kills=" << p.kills << ", money=" << p.money << std::endl;
 }
 void NetworkManager::HandleEnemySpawn(const std::string& msg) {
     uint64_t enemyID, timestamp;
@@ -528,9 +527,10 @@ void NetworkManager::SendGameplayMessage(const std::string& msg) {
 
 void NetworkManager::ThrottledSendPlayerUpdate() {
     const float playerUpdateRate = 0.016f; // ~62.5 Hz
-    if (m_playerUpdateClock.getElapsedTime().asSeconds() < playerUpdateRate) return;
-    m_playerUpdateClock.restart();
-    SendPlayerUpdate();
+    if (m_playerUpdateClock.getElapsedTime().asSeconds() >= playerUpdateRate) {
+        SendPlayerUpdate();
+        m_playerUpdateClock.restart();
+    }
 }
 
 void NetworkManager::SpawnEnemiesAndBroadcast() {

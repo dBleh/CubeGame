@@ -35,8 +35,9 @@ to push  to git
 
 cd /Users/dunca/Desktop/Game  # Navigate to your project folder
 git status                    # Check changes (optional)
-git add .                     # Stage all changes
-git commit -m "Removed bullet pre-check collision in ShootBullet"  # Commit changes
+git add .                     # Stage all changes initially
+git restore --staged CMakeLists.txt  # Unstage CMakeLists.txt specifically
+git commit -m "Removed bullet pre-check collision in ShootBullet"  # Commit changes (excluding CMakeLists.txt)
 git push origin main          # Push to GitHub
 
 to pull

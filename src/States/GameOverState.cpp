@@ -88,3 +88,6 @@ void GameOverState::UpdateLeaderboard() {
     }
     game->GetHUD().updateText("leaderboard", leaderboard);
 }
+void GameOverState::Interpolate(float alpha) {
+    // No interpolation needed for a static lobby search screen
+}

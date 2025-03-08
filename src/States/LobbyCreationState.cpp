@@ -121,3 +121,6 @@ void LobbyCreationState::CreateLobby(const std::string& lobbyName) {
         game->SetCurrentState(GameState::MainMenu);
     }
 }
+void LobbyCreationState::Interpolate(float alpha) {
+    // No interpolation needed for a static lobby search screen
+}

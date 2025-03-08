@@ -33,13 +33,12 @@ void Player::initialize() {
 bool Player::move(float dt) {
     bool moved = false;
     float effectiveSpeed = speed > 0 ? speed : PLAYER_SPEED;
+    lastX = x; // Store previous position
+    lastY = y;
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::W)) { y -= effectiveSpeed * dt; moved = true; }
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) { y += effectiveSpeed * dt; moved = true; }
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::A)) { x -= effectiveSpeed * dt; moved = true; }
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) { x += effectiveSpeed * dt; moved = true; }
-    renderedX = x;
-    renderedY = y;
-    shape.setPosition(renderedX, renderedY);
     return moved;
 }
 

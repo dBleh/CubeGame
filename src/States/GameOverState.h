@@ -25,7 +25,7 @@ public:
 
     /// Process user input in the game over state.
     void ProcessEvent(const sf::Event& event) override;
-
+    void Interpolate(float alpha) override;
 private:
     /// Update the leaderboard displayed on the HUD.
     void UpdateLeaderboard();

@@ -197,3 +197,6 @@ void MainMenuState::ProcessEvents(const sf::Event& event) {
         }
     }
 }
+void MainMenuState::Interpolate(float alpha) {
+    // No interpolation needed for a static lobby search screen
+}

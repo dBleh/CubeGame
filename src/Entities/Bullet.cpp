@@ -45,26 +45,9 @@ void Bullet::initialize(float startX, float startY, float targetX, float targetY
  * @param dt Delta time (time elapsed since the last update).
  */
 void Bullet::update(float dt) {
-    // Update logical position based on velocity.
+    lastX = x; // Store previous position
+    lastY = y;
     x += velocityX * dt;
     y += velocityY * dt;
-
-    // Interpolate the rendered position for smooth visuals.
-    float interpFactor = std::min(30.0f * dt, 1.0f); // Fast catch-up factor
-    float oldRenderedX = renderedX, oldRenderedY = renderedY;
-    renderedX += (x - renderedX) * interpFactor;
-    renderedY += (y - renderedY) * interpFactor;
-    shape.setPosition(renderedX, renderedY);
-
-    // Debug log if the bullet "jumps" significantly.
-    float dx = x - renderedX;
-    float dy = y - renderedY;
-    if (std::abs(dx) > 10 || std::abs(dy) > 10) {
-        std::cout << "[DEBUG] Bullet " << id << " jump: (" << dx << ", " << dy << ") from ("
-                  << oldRenderedX << ", " << oldRenderedY << ") to ("
-                  << renderedX << ", " << renderedY << ")" << std::endl;
-    }
-
-    // Decrease lifetime.
     lifetime -= dt;
 }

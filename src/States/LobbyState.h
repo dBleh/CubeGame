@@ -5,7 +5,6 @@
 #include "../Core/CubeGame.h"
 #include <SFML/Graphics.hpp>
 #include <array>
-
 /**
  * @brief Manages the lobby screen.
  *
@@ -18,7 +17,7 @@ public:
      * @param game Pointer to the main CubeGame instance.
      */
     explicit LobbyState(CubeGame* game);
-
+    void Interpolate(float alpha) override;
     /// Update lobby state (e.g., update lobby members and HUD).
     void Update(float dt) override;
     /// Render the lobby screen.

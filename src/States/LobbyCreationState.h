@@ -15,7 +15,7 @@ public:
      * @param game Pointer to the main CubeGame instance.
      */
     LobbyCreationState(CubeGame* game);
-
+    void Interpolate(float alpha) override;
     /// Update logic (if needed) for lobby creation.
     void Update(float dt) override;
 

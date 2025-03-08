@@ -146,17 +146,20 @@ float CubeGame::GetDeltaTime() const {
 //--------------------------------------
 void CubeGame::Run() {
     sf::Clock clock;
-    const float fixedDt = 1.0f / 60.0f; // 60 FPS fixed timestep
+    const float fixedDt = 1.0f / 60.0f; // Fixed timestep: 60 updates per second
     float accumulator = 0.0f;
 
     while (window.isOpen()) {
+        // Process network and events
         networkManager->processCallbacks();
         networkManager->receiveMessages();
 
+        // Calculate elapsed time since last frame
         float frameTime = clock.restart().asSeconds();
-        deltaTime = frameTime; // For rendering or other uncapped uses
+        if (frameTime > 0.25f) frameTime = 0.25f; // Cap to prevent spiral of death
         accumulator += frameTime;
 
+        // Update game logic with fixed timestep
         while (accumulator >= fixedDt) {
             if (m_isHost) {
                 enemySyncTimer += fixedDt;
@@ -166,17 +169,18 @@ void CubeGame::Run() {
                 }
             }
             if (shootCooldown > 0) shootCooldown -= fixedDt;
-            if (state) state->Update(fixedDt); // Use fixedDt for game logic
+            if (state) state->Update(fixedDt); // Logic update with fixed timestep
             accumulator -= fixedDt;
         }
 
+        // Handle events
         sf::Event event;
         while (window.pollEvent(event)) {
             ProcessEvents(event);
             if (state) state->ProcessEvent(event);
         }
 
-        // State management: create new state if current state has changed.
+        // State management
         switch (currentState) {
             case GameState::MainMenu:
                 if (!state || !dynamic_cast<MainMenuState*>(state.get()))
@@ -206,12 +210,11 @@ void CubeGame::Run() {
                 break;
         }
 
-        // Update and render the current state.
+        // Calculate interpolation factor (alpha) for rendering
+        float alpha = accumulator / fixedDt; // Between 0 and 1
         if (state) {
-            state->Update(fixedDt);
-            if (state && currentState == GetCurrentState()) {
-                state->Render();
-            }
+            state->Interpolate(alpha); // New method to interpolate positions
+            state->Render();           // Render with interpolated positions
         }
     }
 }

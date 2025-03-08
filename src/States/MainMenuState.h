@@ -16,7 +16,7 @@ public:
      * @param game Pointer to the main CubeGame instance.
      */
     MainMenuState(CubeGame* game);
-
+    void Interpolate(float alpha) override;
     /// Update menu logic (e.g., update header/status text).
     void Update(float dt) override;
     /// Render the main menu screen.

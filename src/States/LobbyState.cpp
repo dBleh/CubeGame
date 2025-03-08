@@ -327,3 +327,6 @@ bool LobbyState::AllPlayersReady()
         }
     );
 }
+void LobbyState::Interpolate(float alpha) {
+    // No interpolation needed for a static lobby search screen
+}
