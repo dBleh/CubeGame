@@ -389,15 +389,18 @@ void NetworkManager::HandleEnemyRemove(const std::string& msg) {
 void NetworkManager::HandleHit(const std::string& msg, CSteamID sender) {
     uint64_t bulletId, enemyId, shooterSteamID, timestamp;
     int damage;
-    if (sscanf(msg.c_str(), "H|%llu|%llu|%llu|%d|%llu", &bulletId, &enemyId, &shooterSteamID, &damage, &timestamp) != 5) {
+    if (sscanf(msg.c_str(), "H|%llu|%llu|%llu|%d|%llu", &bulletId, &enemyId, &shooterSteamID, &damage, ×tamp) != 5) {
         std::cout << "[DEBUG] Failed to parse hit message: " << msg << "\n";
         return;
     }
     if (game->m_isHost) {
-        std::cout << "[DEBUG] HandleHit: shooterSteamID=" << shooterSteamID << ", sender=" << sender.ConvertToUint64() << "\n";
+        std::cout << "[DEBUG] HandleHit: shooterSteamID=" << shooterSteamID << ", sender=" << sender.ConvertToUint64() 
+                  << ", enemyId=" << enemyId << ", timestamp=" << timestamp << "\n";
         if (game->entityManager->getEnemies().count(enemyId)) {
             Enemy& e = game->entityManager->getEnemies()[enemyId];
+            // Only process if this is a new hit or a later timestamp
             if (!m_lastEnemyUpdateTime.count(enemyId) || m_lastEnemyUpdateTime[enemyId] < timestamp) {
+                std::cout << "[DEBUG] Processing hit on enemy " << enemyId << " with health " << e.health << "\n";
                 e.health -= damage;
                 m_lastEnemyUpdateTime[enemyId] = timestamp;
                 if (e.health <= 0) {
@@ -408,10 +411,10 @@ void NetworkManager::HandleHit(const std::string& msg, CSteamID sender) {
                         shooter.kills += 1;
                         shooter.money += 10;
 
-                        // Ensure the updated player is saved back to the map
+                        // Save updated player back to the map
                         game->entityManager->getPlayers()[shooterID] = shooter;
 
-                        // Broadcast the kill/money update
+                        // Broadcast kill/money update
                         char buffer[128];
                         int bytes = snprintf(buffer, sizeof(buffer), "P|D|%llu|k|%d|m|%d",
                                              shooterSteamID, shooter.kills, shooter.money);
@@ -426,12 +429,21 @@ void NetworkManager::HandleHit(const std::string& msg, CSteamID sender) {
                         if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                             broadcastMessage(std::string(buffer));
                         }
+
+                        // Remove enemy and clear timestamp to allow new enemies with same ID
                         game->entityManager->getEnemies().erase(enemyId);
+                        m_lastEnemyUpdateTime.erase(enemyId);
+                        std::cout << "[DEBUG] Enemy " << enemyId << " killed and removed\n";
                     } else {
                         std::cout << "[DEBUG] Shooter " << shooterSteamID << " not found in players list\n";
                     }
                 }
+            } else {
+                std::cout << "[DEBUG] Hit rejected: timestamp " << timestamp 
+                          << " <= last update " << m_lastEnemyUpdateTime[enemyId] << " for enemy " << enemyId << "\n";
             }
+        } else {
+            std::cout << "[DEBUG] Enemy " << enemyId << " not found on host\n";
         }
     }
 }

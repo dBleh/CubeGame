@@ -140,7 +140,6 @@ void GameplayState::UpdatePlayingState(float dt) {
         [&](const Bullet& b, uint64_t enemyId) {
             int damage = 10;
             if (game->IsHost() && game->GetEnemies().count(enemyId)) {
-                // Only process locally if the bullet belongs to the host
                 if (b.shooterSteamID == game->GetLocalPlayer().steamID) {
                     Enemy& enemy = game->GetEnemies()[enemyId];
                     enemy.health -= damage;
@@ -157,6 +156,8 @@ void GameplayState::UpdatePlayingState(float dt) {
                                              shooter.steamID.ConvertToUint64(), shooter.kills, shooter.money);
                         if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                             game->GetNetworkManager()->broadcastMessage(std::string(buffer));
+                            std::cout << "[DEBUG] Host broadcasted kill update: P|D|" << shooter.steamID.ConvertToUint64() 
+                                      << "|k|" << shooter.kills << "|m|" << shooter.money << "\n";
                         }
                         bytes = snprintf(buffer, sizeof(buffer), "E|REMOVE|%llu", enemyId);
                         if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
@@ -164,7 +165,6 @@ void GameplayState::UpdatePlayingState(float dt) {
                         }
                     }
                 } else {
-                    // For client bullets, rely on hit message processing
                     uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::system_clock::now().time_since_epoch()).count();
                     char hitBuffer[128];
@@ -186,7 +186,7 @@ void GameplayState::UpdatePlayingState(float dt) {
                     if (enemy.health <= 0) {
                         game->GetEntityManager()->getEnemies().erase(enemyId);
                         std::cout << "[DEBUG] Client predicted kill for " << localPlayer.steamID.ConvertToUint64()
-                                  << ", awaiting host confirmation.\n";
+                                  << ", awaiting host confirmation. EnemyID=" << enemyId << "\n";
                     }
                 }
             }
@@ -204,6 +204,8 @@ void GameplayState::UpdatePlayingState(float dt) {
                                          player.steamID.ConvertToUint64(), player.health, player.isAlive ? 1 : 0);
                     if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                         game->GetNetworkManager()->broadcastMessage(std::string(buffer));
+                        std::cout << "[DEBUG] Host broadcasted health update: P|D|" << player.steamID.ConvertToUint64() 
+                                  << "|h|" << player.health << "|a|" << (player.isAlive ? 1 : 0) << "\n";
                     }
                     game->GetPlayers()[playerId] = player;
                     if (playerId == game->GetLocalPlayer().steamID) {
@@ -215,7 +217,7 @@ void GameplayState::UpdatePlayingState(float dt) {
         }
     );
 
-    // Process pending hits (unchanged)
+    // Process pending hits
     for (auto it = pendingHits.begin(); it != pendingHits.end();) {
         it->retryTimer -= dt;
         if (it->retryTimer <= 0) {
@@ -235,6 +237,12 @@ void GameplayState::UpdatePlayingState(float dt) {
         } else {
             ++it;
         }
+    }
+
+    // Log client stats each frame (for debugging)
+    if (!game->IsHost()) {
+        std::cout << "[DEBUG] Client stats - Kills: " << localPlayer.kills 
+                  << ", Money: " << localPlayer.money << ", Health: " << localPlayer.health << "\n";
     }
 }
 //---------------------------------------------------------
