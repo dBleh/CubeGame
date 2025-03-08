@@ -1,4 +1,5 @@
 #include "SteamManager.h"
+#include <iostream>
 
 void SteamManager::Initialize() {
     if (!SteamAPI_Init()) {
@@ -16,4 +17,3 @@ void SteamManager::SendPlayerUpdate(CubeGame* game) {
              game->GetLocalPlayer().health);
     SteamMatchmaking()->SendLobbyChatMsg(game->GetLobbyID(), buffer, strlen(buffer) + 1);
 }
-

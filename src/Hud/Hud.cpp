@@ -1,11 +1,17 @@
 #include "HUD.h"
 #include <cmath>
 
+//-------------------------------------------------------------------------
+// Constructor
+//-------------------------------------------------------------------------
 HUD::HUD(sf::Font& font)
     : m_font(font)
 {
 }
 
+//-------------------------------------------------------------------------
+// HUD Element Management
+//-------------------------------------------------------------------------
 void HUD::addElement(const std::string& id,
                      const std::string& content,
                      unsigned int size,
@@ -50,13 +56,17 @@ void HUD::updateBaseColor(const std::string& id, const sf::Color& color)
     }
 }
 
-void HUD::updateElementPosition(const std::string& id, const sf::Vector2f& pos) {
+void HUD::updateElementPosition(const std::string& id, const sf::Vector2f& pos)
+{
     auto it = m_elements.find(id);
     if (it != m_elements.end()) {
         it->second.pos = pos;
     }
 }
 
+//-------------------------------------------------------------------------
+// Rendering Methods
+//-------------------------------------------------------------------------
 void HUD::render(sf::RenderWindow& window, const sf::View& view, GameState currentState) {
     sf::View originalView = window.getView();
     sf::Vector2f viewTopLeft = view.getCenter() - (view.getSize() * 0.5f);
@@ -71,15 +81,13 @@ void HUD::render(sf::RenderWindow& window, const sf::View& view, GameState curre
                 window.setView(view);
                 text.setPosition(viewTopLeft + element.pos);
             }
-            if (element.hoverable && isMouseOverText(window, text)) {
+            if (element.hoverable && isMouseOverText(window, text))
                 text.setFillColor(element.hoverColor);
-            } else {
+            else
                 text.setFillColor(element.baseColor);
-            }
             window.draw(text);
         }
     }
-
     window.setView(originalView);
 }
 
@@ -101,10 +109,12 @@ bool HUD::isMouseOverText(const sf::RenderWindow& window, const sf::Text& text)
 }
 
 bool HUD::isFullyLoaded() const {
-    // Basic check: ensure at least one HUD element is loaded
     return !m_elements.empty();
 }
 
+//-------------------------------------------------------------------------
+// HUD Configuration Methods
+//-------------------------------------------------------------------------
 void HUD::configureGameplayHUD(const sf::Vector2u& winSize) {
     // Game status element
     addElement("gameStatus", "Playing", 16,
@@ -123,10 +133,13 @@ void HUD::configureGameplayHUD(const sf::Vector2u& winSize) {
                sf::Vector2f(SCREEN_WIDTH - 200.f, 10.f),
                GameState::Playing, RenderMode::ViewSpace, false);
     updateBaseColor("scoreboard", sf::Color::White);
+
+    // Next level timer element
     addElement("nextLevelTimer", "", 16,
-        sf::Vector2f(0.5f * winSize.x - 50.f, 0.10f * winSize.y),
-        GameState::Playing, RenderMode::ViewSpace, false);
-updateBaseColor("nextLevelTimer", sf::Color::White);
+               sf::Vector2f(0.5f * winSize.x - 50.f, 0.10f * winSize.y),
+               GameState::Playing, RenderMode::ViewSpace, false);
+    updateBaseColor("nextLevelTimer", sf::Color::White);
+
     // Pause menu element
     addElement("pauseMenu", "Paused\nPress M to Return to Main Menu\nPress ESC to Resume", 24,
                sf::Vector2f(0.5f * winSize.x - 150.f, 0.3f * winSize.y),
@@ -154,15 +167,15 @@ void HUD::configureStoreHUD(const sf::Vector2u& winSize) {
     updateBaseColor("speedBoostButton", sf::Color::White);
 }
 
+//-------------------------------------------------------------------------
+// HUD Refresh Methods
+//-------------------------------------------------------------------------
 void HUD::refreshHUDContent(GameState currentState, bool menuVisible, bool shopOpen, const sf::Vector2u& winSize, const Player& localPlayer) {
-    // --- Update Store Elements ---
+    // Update store elements if shop is open.
     if (shopOpen) {
-        sf::Vector2f titlePos(0.5f * winSize.x - 100.f, 0.05f * winSize.y);
-        sf::Vector2f moneyPos(0.5f * winSize.x - 80.f, 0.15f * winSize.y);
-        sf::Vector2f speedPos(0.5f * winSize.x - 80.f, 0.25f * winSize.y);
-        updateElementPosition("storeTitle", titlePos);
-        updateElementPosition("storeMoney", moneyPos);
-        updateElementPosition("speedBoostButton", speedPos);
+        updateElementPosition("storeTitle", sf::Vector2f(0.5f * winSize.x - 100.f, 0.05f * winSize.y));
+        updateElementPosition("storeMoney", sf::Vector2f(0.5f * winSize.x - 80.f, 0.15f * winSize.y));
+        updateElementPosition("speedBoostButton", sf::Vector2f(0.5f * winSize.x - 80.f, 0.25f * winSize.y));
         updateText("storeMoney", "Money: " + std::to_string(localPlayer.money));
         updateText("storeTitle", "Store (Press B to Close)");
         updateText("speedBoostButton", "Speed Boost (+50) - 50");
@@ -172,12 +185,11 @@ void HUD::refreshHUDContent(GameState currentState, bool menuVisible, bool shopO
         updateText("speedBoostButton", "");
     }
     
-    // --- Update Pause Menu Element ---
-    if (currentState == GameState::Playing) {
+    // Update pause menu element.
+    if (currentState == GameState::Playing)
         updateText("pauseMenu", menuVisible ? "Paused\nPress M to Return to Main Menu\nPress ESC to Resume" : "");
-    } else {
+    else
         updateText("pauseMenu", "");
-    }
 }
 
 void HUD::refreshGameInfo(const sf::Vector2u& winSize,
@@ -187,9 +199,8 @@ void HUD::refreshGameInfo(const sf::Vector2u& winSize,
                           float nextLevelTimer,
                           const std::unordered_map<CSteamID, Player, CSteamIDHash>& players)
 {
-    // Update the level information.
-    sf::Vector2f levelPos(0.05f * static_cast<float>(winSize.x), 0.10f * static_cast<float>(winSize.y));
-    updateElementPosition("level", levelPos);
+    // Update level display.
+    updateElementPosition("level", sf::Vector2f(0.05f * winSize.x, 0.10f * winSize.y));
     updateText("level",
         "Level: " + std::to_string(currentLevel) +
         "\nEnemies: " + std::to_string(enemyCount) +
@@ -198,35 +209,29 @@ void HUD::refreshGameInfo(const sf::Vector2u& winSize,
         "\nMoney: " + std::to_string(localPlayer.money)
     );
 
-    // Update game status (e.g., next wave timer or "Playing").
-    sf::Vector2f statusPos(0.05f * static_cast<float>(winSize.x), 0.05f * static_cast<float>(winSize.y));
-    updateElementPosition("gameStatus", statusPos);
+    // Update game status.
+    updateElementPosition("gameStatus", sf::Vector2f(0.05f * winSize.x, 0.05f * winSize.y));
     updateText("gameStatus",
         (nextLevelTimer > 0) ?
             "Next Wave in: " + std::to_string(static_cast<int>(nextLevelTimer + 0.5f)) + "s"
           : "Playing"
     );
 
-    // Update the next level timer element.
-    sf::Vector2f timerPos(0.5f * static_cast<float>(winSize.x) - 50.f, 0.10f * static_cast<float>(winSize.y));
-    updateElementPosition("nextLevelTimer", timerPos);
-    if (nextLevelTimer > 0) {
+    // Update next level timer element.
+    updateElementPosition("nextLevelTimer", sf::Vector2f(0.5f * winSize.x - 50.f, 0.10f * winSize.y));
+    if (nextLevelTimer > 0)
         updateText("nextLevelTimer", "Next Wave: " + std::to_string(static_cast<int>(nextLevelTimer + 0.5f)) + "s");
-    } else {
+    else
         updateText("nextLevelTimer", "");
-    }
 
-    // Update the scoreboard.
-    sf::Vector2f scorePos(0.85f * static_cast<float>(winSize.x), 0.05f * static_cast<float>(winSize.y));
-    updateElementPosition("scoreboard", scorePos);
+    // Update scoreboard.
+    updateElementPosition("scoreboard", sf::Vector2f(0.75f * winSize.x, 0.05f * winSize.y));
     std::string scoreboard = "Scoreboard:\n";
     for (const auto& playerPair : players) {
         const Player& player = playerPair.second;
-        // Get the player's Steam name via SteamFriends.
         const char* steamName = SteamFriends() ? SteamFriends()->GetFriendPersonaName(player.steamID) : "Unknown";
-        if (!steamName || steamName[0] == '\0') {
+        if (!steamName || steamName[0] == '\0')
             steamName = "Unknown";
-        }
         scoreboard += std::string(steamName) +
                       ": Kills=" + std::to_string(player.kills) +
                       ", HP=" + std::to_string(player.health) + "\n";
@@ -239,9 +244,8 @@ void HUD::updateScoreboard(const std::unordered_map<CSteamID, Player, CSteamIDHa
     for (const auto& playerPair : players) {
         const Player& player = playerPair.second;
         const char* steamName = SteamFriends() ? SteamFriends()->GetFriendPersonaName(player.steamID) : "Unknown";
-        if (!steamName || steamName[0] == '\0') {
+        if (!steamName || steamName[0] == '\0')
             steamName = "Unknown";
-        }
         scoreboard += std::string(steamName) +
                       ": Kills=" + std::to_string(player.kills) +
                       ", HP=" + std::to_string(player.health) + "\n";

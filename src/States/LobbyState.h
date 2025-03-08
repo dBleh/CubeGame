@@ -5,28 +5,40 @@
 #include "../Core/CubeGame.h"
 #include <SFML/Graphics.hpp>
 #include <array>
+
 /**
- * LobbyState: Manages the lobby screen.
- * Displays a modern, white, rounded-panel background and updates lobby info.
+ * @brief Manages the lobby screen.
+ *
+ * Displays a header, player slots, and prompts for starting the game or returning to the main menu.
  */
-// LobbyState.h
-
-    
-
 class LobbyState : public State {
 public:
+    /**
+     * @brief Constructs a new LobbyState object.
+     * @param game Pointer to the main CubeGame instance.
+     */
     explicit LobbyState(CubeGame* game);
-    
-    virtual void Update(float dt) override;
-    virtual void Render() override;
-    virtual void ProcessEvent(const sf::Event& event) override;
-    bool IsFullyLoaded();
-private:
-    bool loadedMessageSent = false;
 
-    std::array<sf::RectangleShape, 12> m_playerSlotRects;
+    /// Update lobby state (e.g., update lobby members and HUD).
+    void Update(float dt) override;
+    /// Render the lobby screen.
+    void Render() override;
+    /// Process user input events.
+    void ProcessEvent(const sf::Event& event) override;
+
+    /// Check if the game and HUD are fully loaded.
+    bool IsFullyLoaded();
+
+private:
+    bool loadedMessageSent = false; ///< Flag to ensure PLAYER_LOADED message is sent once.
+
+    std::array<sf::RectangleShape, 12> m_playerSlotRects; ///< Rectangles for up to 12 player slots.
+    
+    /// Internal event processing.
     void ProcessEvents(const sf::Event& event);
+    /// Update the HUD with current lobby member information.
     void UpdateLobbyMembers();
+    /// Check if all players in the lobby are marked as ready.
     bool AllPlayersReady();
 };
 

@@ -6,24 +6,45 @@
 #include <steam/steam_api.h>
 #include <iostream>
 
+/**
+ * @brief Represents a player in the game.
+ *
+ * Stores graphical properties, positional data, health, and game-related stats.
+ * Provides methods for initialization, movement, applying boosts, and shooting.
+ */
 struct Player {
-    sf::RectangleShape shape;
-    float x, y;           // Target position from network or local movement
-    float renderedX, renderedY; // Smoothed position for rendering
-    float lastX, lastY;   // Previous position for interpolation
-    float targetX, targetY; // Target position for interpolation
-    float interpolationTime; // Time elapsed for interpolation
-    int health = 100;
-    CSteamID steamID;
-    bool ready = false;
-    bool isAlive = true;
-    int kills = 0;
-    int money;    // Currency for store
-    float speed;
+    //-------------------------------------------------------------------------
+    // Graphical Data
+    //-------------------------------------------------------------------------
+    sf::RectangleShape shape; ///< Visual representation of the player.
 
-    void initialize();
-    bool move(float dt);
-    void applySpeedBoost(float boostAmount);
+    //-------------------------------------------------------------------------
+    // Positional Data
+    //-------------------------------------------------------------------------
+    float x, y;                   ///< Logical position.
+    float renderedX, renderedY;   ///< Interpolated position for rendering.
+    float lastX, lastY;           ///< Previous position for interpolation.
+    float targetX, targetY;       ///< Target position for interpolation.
+    float interpolationTime;      ///< Elapsed time used for interpolation.
+
+    //-------------------------------------------------------------------------
+    // Gameplay Properties
+    //-------------------------------------------------------------------------
+    int health = PLAYER_HEALTH;   ///< Player health.
+    CSteamID steamID;             ///< Unique Steam ID.
+    bool ready = false;           ///< Ready status in lobby.
+    bool isAlive = true;          ///< Alive flag.
+    int kills = 0;                ///< Kill count.
+    int money;                    ///< In-game currency.
+    float speed;                  ///< Movement speed.
+
+    //-------------------------------------------------------------------------
+    // Member Functions
+    //-------------------------------------------------------------------------
+    void initialize();                    ///< Set default values.
+    bool move(float dt);                  ///< Process movement input.
+    void applySpeedBoost(float boostAmount); ///< Apply a temporary speed boost.
+    void ShootBullet(class CubeGame* game);   ///< Fire a bullet (requires CubeGame context).
 };
 
 #endif // PLAYER_H

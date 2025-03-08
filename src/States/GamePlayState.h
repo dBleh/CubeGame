@@ -12,177 +12,113 @@
 #endif
 
 /**
- * @brief GameplayState manages game logic and rendering when the game is in play mode.
+ * @brief GameplayState manages game logic and rendering while in play mode.
+ *
+ * This state handles player movement, enemy spawning and updates, camera control,
+ * HUD updates, collision checks, and transitioning between levels.
  */
 class GameplayState : public State {
 public:
+    // Structure to store pending hit information for retrying if enemy not found yet.
+    struct PendingHit {
+        uint64_t bulletId;
+        uint64_t enemyId;
+        uint64_t shooterSteamID;
+        float retryTimer;
+    };
+
     /**
      * @brief Construct a new GameplayState object.
      * @param game Pointer to the main CubeGame instance.
      */
     GameplayState(CubeGame* game);
 
-    /**
-     * @brief Update the game logic.
-     * @param dt Delta time since the last update.
-     */
+    /// Update game logic.
     void Update(float dt) override;
 
-    /**
-     * @brief Render the current game state.
-     */
+    /// Render the current game state.
     void Render() override;
 
-    /**
-     * @brief Process an SFML event.
-     * @param event The event to process.
-     */
+    /// Process input events.
     void ProcessEvent(const sf::Event& event) override;
 
-    /**
-     * @brief Spawn enemies into the game.
-     */
+    /// Spawn enemies (wrapper function, if needed).
     void SpawnEnemies();
 
-    /// Flag indicating whether the store UI is visible.
-    bool storeVisible = false;
+    /// Update enemy vertex data for batch rendering.
+    void updateEnemyVertices();
+
+    /// Start the next level timer.
     void StartNextLevelTimer(float duration);
+
+    /// Check for level completion and advance to the next level.
     void CheckAndAdvanceLevel();
-    float nextLevelTimer; // Timer for next wave
-    bool timerActive = false;
-    bool IsFullyLoaded();
+
+    // Public state variables.
+    sf::VertexArray enemyVertices; ///< Vertex array for enemy rendering.
+    bool storeVisible = false;     ///< Flag indicating whether the store UI is visible.
+    float nextLevelTimer;          ///< Timer for the next wave.
+    bool timerActive = false;      ///< Indicates if the next-level timer is active.
+    std::vector<PendingHit> pendingHits; ///< Pending hit events (for client-side prediction).
+
 private:
-bool menuVisible = false;
-struct PendingHit {
-    uint64_t bulletId;
-    uint64_t enemyId;
-    uint64_t shooterSteamID;
-    float retryTimer;
-};
-std::vector<PendingHit> pendingHits;
-    //==========================================================================
-    // Update Helpers
-    //==========================================================================
-    void UpdateShoppingState(float dt);
-    /**
-     * @brief Update game logic when in Playing state.
-     * @param dt Delta time.
-     */
-    void UpdatePlayingState(float dt);
+    bool menuVisible = false;      ///< Flag for pause menu visibility.
 
-    /**
-     * @brief Update game logic when in Shopping state.
-     * @param dt Delta time.
-     */
+    //===============================================================
+    // Update Helper Methods
+    //===============================================================
+    void UpdatePlayingState(float dt);  ///< Update logic when game is in Playing state.
+    void UpdateShoppingState(float dt); ///< Update logic for shopping state (if applicable).
+    void UpdateSpectatingState(float dt); ///< Update logic when spectating (if applicable).
+    void UpdateHUD();                   ///< Update HUD text elements.
+    void InterpolateEntities(float dt); ///< Interpolate positions for smooth movement.
 
-    /**
-     * @brief Update game logic when in Spectating state.
-     * @param dt Delta time.
-     */
-    void UpdateSpectatingState(float dt);
+    //===============================================================
+    // Rendering Helper Methods
+    //===============================================================
+    void RenderPlayers();   ///< Draw all player entities.
+    void RenderEnemies();   ///< Draw all enemy entities.
+    void RenderBullets();   ///< Draw all bullet entities.
+    void RenderStoreUI();   ///< Draw store UI elements.
+    void RenderGrid(sf::RenderWindow& window, const sf::View& camera); ///< Draw grid overlay.
 
-    /**
-     * @brief Update the HUD text elements.
-     */
-    void UpdateHUD();
-    void InterpolateEntities(float dt);
-    //==========================================================================
-    // Rendering Helpers
-    //==========================================================================
+    //===============================================================
+    // Action Helper Methods
+    //===============================================================
+    void UpdateCamera(float dt);   ///< Update camera based on player position.
+    void NextLevel();              ///< Transition to the next level.
+    void HandleStorePurchase();    ///< Process store purchase input.
+    void UpdateScoreboard();       ///< Update scoreboard in the HUD.
 
-    /**
-     * @brief Render all player entities.
-     */
-    void RenderPlayers();
+    //===============================================================
+    // HUD & UI Initialization Helpers
+    //===============================================================
+    void InitializeHUD();          ///< Initialize HUD elements for gameplay.
+    void InitializeStoreUI();      ///< Initialize store UI elements.
+    
+    //===============================================================
+    // Placeholder and Utility Methods
+    //===============================================================
+    bool AllPlayersDead();         ///< Check if all players are dead.
+    void SendBulletData(const Bullet& b) {} ///< (Placeholder) Send bullet data.
+    void SendEnemyUpdate() {}              ///< (Placeholder) Send enemy update.
+    void SpawnSniperBullet(uint64_t enemyId, float targetX, float targetY) {} ///< (Placeholder)
 
-    /**
-     * @brief Render all enemy entities.
-     */
-    void RenderEnemies();
-
-    /**
-     * @brief Render all bullet entities.
-     */
-    void RenderBullets();
-
-    /**
-     * @brief Render the store UI elements.
-     */
-    void RenderStoreUI();
-    void ConfigureGameplayHUD();
-    void ConfigureStoreHUD();
-    //==========================================================================
-    // Action Helpers
-    //==========================================================================
-
-    /**
-     * @brief Send a player update message to the network.
-     */
-    void SendPlayerUpdate();
-
-    /**
-     * @brief Update the game camera based on the average player position.
-     * @param dt Delta time.
-     */
-    void UpdateCamera(float dt);
-
-    /**
-     * @brief Handle shooting a bullet.
-     */
-    void ShootBullet();
-
-    /**
-     * @brief Transition to the next level.
-     */
-    void NextLevel();
-
-    /**
-     * @brief Process input for store purchases.
-     */
-    void HandleStorePurchase();
-
-    /**
-     * @brief Update the scoreboard displayed in the HUD.
-     */
-    void UpdateScoreboard();
-    //==========================================================================
-    // Initialization Helpers
-    //==========================================================================
-
-    /**
-     * @brief Initialize HUD elements for gameplay.
-     */
-    void InitializeHUD();
-
-    /**
-     * @brief Initialize store UI elements.
-     */
-    void InitializeStoreUI();
-
-    //==========================================================================
-    // Placeholder Methods
-    //==========================================================================
-    bool AllPlayersDead();
-    void SendBulletData(const Bullet& b) {}
-    void SendEnemyUpdate() {}
-    void SpawnSniperBullet(uint64_t enemyId, float targetX, float targetY) {}
-
-    //==========================================================================
-    // UI Elements and State Variables
-    //==========================================================================
+    //===============================================================
+    // UI Elements and Additional State Variables
+    //===============================================================
     sf::Text storeTitle;
     sf::Text speedBoostText;
     sf::RectangleShape speedBoostButton;
-    sf::Font font;
-    bool shopOpen; // Replaced storeVisible
-    
-    float lastEnemyUpdateTime = 0.0f;
-    const float enemyUpdateRate = 0.2f;
-   
-    bool showHealthBars = false;
-    sf::RectangleShape arrowShape;
-    int spectatedPlayerIndex = -1; // Index of the player being spectated
-    
+    sf::Font font;               ///< Local font for UI elements.
+    bool shopOpen;               ///< True if the store UI is open (replaces storeVisible).
+
+    float lastEnemyUpdateTime = 0.0f; ///< Accumulator for enemy update timing.
+    const float enemyUpdateRate = 0.2f; ///< Interval for enemy update sync.
+    float gridSize = 50.f;        ///< Grid square size for rendering grid overlay.
+    bool showHealthBars = false;  ///< Option to display enemy health bars.
+    sf::RectangleShape arrowShape; ///< Optional shape for directional indicators.
+    int spectatedPlayerIndex = -1; ///< Index of player being spectated (if applicable).
 };
 
 #endif // GAMEPLAYSTATE_H

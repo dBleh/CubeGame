@@ -14,6 +14,7 @@
 #include <iostream>
 #include <conio.h>
 #include <chrono>
+
 //==============================================================================
 // Project Includes
 //==============================================================================
@@ -26,9 +27,10 @@
 #include "../Entities/Player.h"
 #include "../Hud/Hud.h"
 
-// Forward declaration of State class.
+// Forward declaration of State classes.
 class State;
 class GameplayState;
+
 /**
  * @brief The CubeGame class is the central class for the CubeShooter game.
  *
@@ -36,20 +38,27 @@ class GameplayState;
  */
 class CubeGame {
 public:
+    //--------------------------------------------------------------------------
+    // Public Helper Functions
+    //--------------------------------------------------------------------------
     std::string FormatPlayerUpdate(const Player& p);
     void ResetPlayerState(Player& p);
-    // Grant NetworkManager access to private members.
+
+    // Allow NetworkManager direct access to private members.
     friend class NetworkManager;
+
+    // Returns the current GameplayState (if active).
     GameplayState* GetGameplayState();
-    //==========================================================================
+
+    //--------------------------------------------------------------------------
     // Constructors & Destructors
-    //==========================================================================
+    //--------------------------------------------------------------------------
     CubeGame();
     ~CubeGame();
 
-    //==========================================================================
+    //--------------------------------------------------------------------------
     // Main Game Loop
-    //==========================================================================
+    //--------------------------------------------------------------------------
     void Run();
     void SetIsHost(bool isHost) { m_isHost = isHost; }
 
@@ -59,11 +68,9 @@ public:
      */
     bool IsHost() const { return m_isHost; }
 
-    //==========================================================================
+    //--------------------------------------------------------------------------
     // Public Networking and Rendering Methods
-    //==========================================================================
-   
-
+    //--------------------------------------------------------------------------
     /**
      * @brief Sends a message to a specified target Steam user.
      * @param target The target Steam user.
@@ -76,9 +83,9 @@ public:
      */
     void RenderHUDLayer();
 
-    //==========================================================================
+    //--------------------------------------------------------------------------
     // Accessor Methods
-    //==========================================================================
+    //--------------------------------------------------------------------------
     HUD& GetHUD() { return hud; }
     sf::RenderWindow& GetWindow() { return window; }
     sf::Font& GetFont() { return font; }
@@ -93,13 +100,13 @@ public:
     GameState& GetCurrentState() { return currentState; }
     std::unordered_map<CSteamID, bool, CSteamIDHash> playerLoadedStatus;
     static constexpr float INITIAL_WAVE_DELAY = 3.0f;
-    
+
     /**
      * @brief Sets the current game state.
      * @param state The new game state.
      */
     void SetCurrentState(GameState state) { currentState = state; }
-    
+
     bool IsInLobby() const { return inLobby; }
     bool IsGameStarted() const { return gameStarted; }
     bool HasGameBeenPlayed() const { return hasGameBeenPlayed; }
@@ -119,12 +126,11 @@ public:
      */
     bool IsSteamInitialized() const { return debugMode || (SteamUser() && SteamUser()->BLoggedOn()); }
 
-    //==========================================================================
+    //--------------------------------------------------------------------------
     // Game State Transition Methods
-    //==========================================================================
+    //--------------------------------------------------------------------------
     Player& GetLocalPlayer() { return entityManager->getPlayers()[localSteamID]; }
     void EnterLobbyCreation();
-    
     void EnterLobbySearch();
     void SearchLobbies();
     void JoinLobby(CSteamID lobby);
@@ -138,29 +144,32 @@ public:
     void StartGame();
     bool GetPlayersAreLoaded();
 
-    //==========================================================================
+    //--------------------------------------------------------------------------
     // Manager Accessors
-    //==========================================================================
+    //--------------------------------------------------------------------------
     void SyncEnemies();
     NetworkManager* GetNetworkManager() { return networkManager; }
     EntityManager* GetEntityManager() { return entityManager; }
     bool AllPlayersReady();
-    bool lobbyListUpdated = false; // New flag
+    bool lobbyListUpdated = false; // Flag for lobby list update.
     CSteamID GetCurrentLobby() const { return m_currentLobby; }
     float GetDeltaTime() const;
-    //==========================================================================
+
+    //--------------------------------------------------------------------------
     // Rendering Helpers
-    //==========================================================================
+    //--------------------------------------------------------------------------
     void AdjustViewToWindow();
-//==========================================================================
+
+    //--------------------------------------------------------------------------
     // Game Identifier Constant
-    //==========================================================================
+    //--------------------------------------------------------------------------
     static const char* GAME_ID;
+    
 private:
-float deltaTime;
-    //==========================================================================
-    // Game State Variables
-    //==========================================================================
+    //--------------------------------------------------------------------------
+    // Game Timing & State Variables
+    //--------------------------------------------------------------------------
+    float deltaTime;
     bool m_isHost = false;
     float shoppingTimer = 0.0f;
     GameState currentState = GameState::MainMenu;
@@ -172,13 +181,12 @@ float deltaTime;
     int nextBulletId = 0;
     bool debugMode = false;
     float shootCooldown = 0.0f;
-  
     float enemySyncTimer = 0.0f;
     const float ENEMY_SYNC_INTERVAL = 3.0f;
 
-    //==========================================================================
+    //--------------------------------------------------------------------------
     // Steam & Lobby Related Variables
-    //==========================================================================
+    //--------------------------------------------------------------------------
     CSteamID m_currentLobby = k_steamIDNil;
     CSteamID m_hostID = k_steamIDNil;
     int m_joinAttempts = 0;
@@ -186,36 +194,34 @@ float deltaTime;
     std::string lobbyNameInput;
     std::unique_ptr<State> state;
    
-    //==========================================================================
+    //--------------------------------------------------------------------------
     // HUD, Rendering and View Management
-    //==========================================================================
+    //--------------------------------------------------------------------------
     HUD hud;
     sf::View view;
     sf::RenderWindow window;
     sf::Font font;
 
-    //==========================================================================
-    // Local Player and Processed Messages
-    //==========================================================================
+    //--------------------------------------------------------------------------
+    // Local Player & Processed Messages
+    //--------------------------------------------------------------------------
     CSteamID localSteamID;
-    std::unordered_set<uint32_t> processedBulletMessages; // Track processed bullet messages
+    std::unordered_set<uint32_t> processedBulletMessages; // Tracks processed bullet messages.
 
-    //==========================================================================
+    //--------------------------------------------------------------------------
     // Manager Pointers
-    //==========================================================================
+    //--------------------------------------------------------------------------
     NetworkManager* networkManager = nullptr;
     EntityManager* entityManager = nullptr;
 
-    //==========================================================================
+    //--------------------------------------------------------------------------
     // Private Helper Methods
-    //==========================================================================
+    //--------------------------------------------------------------------------
     void ProcessEvents(sf::Event& event);
-    void SetupInitialHUD();
+    void SetupInitialHUD();  // Legacy method (no longer used as HUD setup is state-based).
     void ResetViewToDefault();
     void ProcessNetworkMessages(const std::string& msg, CSteamID sender);
     void CheckUserInput();
-    
-    
 };
 
 #endif // CUBEGAME_H
