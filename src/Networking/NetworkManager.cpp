@@ -196,20 +196,18 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
 
     std::cout << "[DEBUG] Handling player update: " << msg << ", parts.size() = " << parts.size() << "\n";
 
-    // Validate minimum parts for any player update
     if (parts.empty() || parts[0] != "P") {
         std::cout << "[DEBUG] Invalid player update (no parts or not 'P'): " << msg << "\n";
         return;
     }
 
     bool isKeyValue = (parts.size() > 1 && parts[1] == "D");
-    size_t minParts = isKeyValue ? 3 : 12; // Key-value needs at least 3, full needs 12
+    size_t minParts = isKeyValue ? 3 : 12;
     if (parts.size() < minParts) {
         std::cout << "[DEBUG] Invalid player update (too few fields): " << msg << "\n";
         return;
     }
 
-    // Safely get SteamID
     size_t idIndex = isKeyValue ? 2 : 1;
     CSteamID id;
     try {
@@ -227,45 +225,50 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
     }
     Player& p = game->entityManager->getPlayers()[id];
 
-    // Skip position updates for local player
-    if (id != game->localSteamID) {
-        p.lastX = p.x;
-        p.lastY = p.y;
-        if (!isKeyValue) {
-            p.x = std::stof(parts[2]);
-            p.y = std::stof(parts[3]);
-            p.renderedX = std::stof(parts[4]);
-            p.renderedY = std::stof(parts[5]);
-        }
-    }
-
     try {
         if (!isKeyValue) {
-            // Only update health, kills, and money for remote players
+            // Full update: only apply to remote players
             if (id != game->localSteamID) {
+                p.lastX = p.x;
+                p.lastY = p.y;
+                p.x = std::stof(parts[2]);
+                p.y = std::stof(parts[3]);
+                p.renderedX = std::stof(parts[4]);
+                p.renderedY = std::stof(parts[5]);
                 p.health = std::stoi(parts[6]);
                 p.kills = std::stoi(parts[7]);
                 p.money = std::stoi(parts[9]);
+                p.ready = std::stoi(parts[8]) != 0;
+                p.speed = std::stof(parts[10]);
+                p.isAlive = std::stoi(parts[11]) != 0;
+                std::cout << "[DEBUG] Parsed player update for " << id.ConvertToUint64()
+                          << ": Kills=" << p.kills << ", Money=" << p.money << "\n";
+            } else {
+                std::cout << "[DEBUG] Skipping full update for local player " << id.ConvertToUint64() << "\n";
             }
-            p.ready = std::stoi(parts[8]) != 0;
-            p.speed = std::stof(parts[10]);
-            p.isAlive = std::stoi(parts[11]) != 0;
-            std::cout << "[DEBUG] Parsed player update for " << id.ConvertToUint64()
-                      << ": Kills=" << p.kills << ", Money=" << p.money << "\n";
         } else {
-            size_t i = 3; // Start after "P|D|<steamID>"
+            // Key-value update: only apply to remote players
+            size_t i = 3;
             while (i + 1 < parts.size()) {
-                if (parts[i] == "x" && id != game->localSteamID) p.x = std::stof(parts[i + 1]);
-                else if (parts[i] == "y" && id != game->localSteamID) p.y = std::stof(parts[i + 1]);
-                else if (parts[i] == "rx" && id != game->localSteamID) p.renderedX = std::stof(parts[i + 1]);
-                else if (parts[i] == "ry" && id != game->localSteamID) p.renderedY = std::stof(parts[i + 1]);
-                else if (parts[i] == "h" && id != game->localSteamID) p.health = std::stoi(parts[i + 1]);
-                else if (parts[i] == "k" && id != game->localSteamID) p.kills = std::stoi(parts[i + 1]);
-                else if (parts[i] == "r") p.ready = std::stoi(parts[i + 1]) != 0;
-                else if (parts[i] == "m" && id != game->localSteamID) p.money = std::stoi(parts[i + 1]);
-                else if (parts[i] == "s") p.speed = std::stof(parts[i + 1]);
-                else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]);
+                if (id != game->localSteamID) {
+                    if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
+                    else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
+                    else if (parts[i] == "rx") p.renderedX = std::stof(parts[i + 1]);
+                    else if (parts[i] == "ry") p.renderedY = std::stof(parts[i + 1]);
+                    else if (parts[i] == "h") p.health = std::stoi(parts[i + 1]);
+                    else if (parts[i] == "k") p.kills = std::stoi(parts[i + 1]);
+                    else if (parts[i] == "m") p.money = std::stoi(parts[i + 1]);
+                    else if (parts[i] == "r") p.ready = std::stoi(parts[i + 1]) != 0;
+                    else if (parts[i] == "s") p.speed = std::stof(parts[i + 1]);
+                    else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]);
+                }
                 i += 2;
+            }
+            if (id != game->localSteamID) {
+                p.lastX = p.x; // Update last positions only for remote players
+                p.lastY = p.y;
+            } else {
+                std::cout << "[DEBUG] Skipping key-value update for local player " << id.ConvertToUint64() << "\n";
             }
         }
     } catch (const std::exception& e) {
