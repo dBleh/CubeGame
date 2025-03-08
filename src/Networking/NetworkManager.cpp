@@ -227,12 +227,13 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
             size_t i = 3;
             while (i + 1 < parts.size()) {
                 if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
-                else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
-                else if (parts[i] == "rx") p.renderedX = std::stof(parts[i + 1]);
-                else if (parts[i] == "ry") p.renderedY = std::stof(parts[i + 1]);
-                // Only update health or isAlive if from an authoritative source (e.g., enemy collision)
-                else if (parts[i] == "h" && game->m_isHost) p.health = std::stoi(parts[i + 1]);
-                else if (parts[i] == "a" && game->m_isHost) p.isAlive = std::stoi(parts[i + 1]);
+            else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
+            else if (parts[i] == "rx") p.renderedX = std::stof(parts[i + 1]);
+            else if (parts[i] == "ry") p.renderedY = std::stof(parts[i + 1]);
+            else if (parts[i] == "h" && game->m_isHost) p.health = std::stoi(parts[i + 1]);
+            else if (parts[i] == "a" && game->m_isHost) p.isAlive = std::stoi(parts[i + 1]);
+            else if (parts[i] == "k") p.kills = std::stoi(parts[i + 1]); // Allow kill updates from host
+            else if (parts[i] == "m") p.money = std::stoi(parts[i + 1]); // Allow money updates from host
                 i += 2;
             }
         }
@@ -373,9 +374,11 @@ void NetworkManager::HandleHit(const std::string& msg, CSteamID sender) {
     uint64_t bulletId, enemyId, shooterSteamID, timestamp;
     int damage;
     if (sscanf(msg.c_str(), "H|%llu|%llu|%llu|%d|%llu", &bulletId, &enemyId, &shooterSteamID, &damage, &timestamp) != 5) {
+        std::cout << "[DEBUG] Failed to parse hit message: " << msg << "\n";
         return;
     }
     if (game->m_isHost) {
+        std::cout << "[DEBUG] HandleHit: shooterSteamID=" << shooterSteamID << ", sender=" << sender.ConvertToUint64() << "\n";
         if (game->entityManager->getEnemies().count(enemyId)) {
             Enemy& e = game->entityManager->getEnemies()[enemyId];
             if (!m_lastEnemyUpdateTime.count(enemyId) || m_lastEnemyUpdateTime[enemyId] < timestamp) {
@@ -385,6 +388,7 @@ void NetworkManager::HandleHit(const std::string& msg, CSteamID sender) {
                     CSteamID shooterID(shooterSteamID);
                     if (game->entityManager->getPlayers().count(shooterID)) {
                         Player& shooter = game->entityManager->getPlayers()[shooterID];
+                        std::cout << "[DEBUG] Attributing kill to SteamID=" << shooterSteamID << "\n";
                         shooter.kills += 1;
                         shooter.money += 10;
 
@@ -402,6 +406,8 @@ void NetworkManager::HandleHit(const std::string& msg, CSteamID sender) {
                             broadcastMessage(std::string(buffer));
                         }
                         game->entityManager->getEnemies().erase(enemyId);
+                    } else {
+                        std::cout << "[DEBUG] Shooter " << shooterSteamID << " not found in players list\n";
                     }
                 }
             }

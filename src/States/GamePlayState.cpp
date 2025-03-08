@@ -117,10 +117,8 @@ void GameplayState::StartNextLevelTimer(float duration) {
 // Update Playing State
 //---------------------------------------------------------
 void GameplayState::UpdatePlayingState(float dt) {
-    // Update camera position.
     UpdateCamera(dt);
 
-    // Update local player movement and send updates.
     Player& localPlayer = game->GetLocalPlayer();
     if (localPlayer.isAlive) {
         bool playerMoved = localPlayer.move(dt);
@@ -130,26 +128,17 @@ void GameplayState::UpdatePlayingState(float dt) {
             localPlayer.shape.setPosition(localPlayer.renderedX, localPlayer.renderedY);
             game->GetNetworkManager()->ThrottledSendPlayerUpdate();
         }
-        // Allow shooting on left mouse click.
         if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
-            Player& updatedLocalPlayer = game->GetLocalPlayer(); // Ensure latest state
+            Player& updatedLocalPlayer = game->GetLocalPlayer();
             if (updatedLocalPlayer.isAlive) {
                 updatedLocalPlayer.ShootBullet(game);
             }
         }
     }
 
-    // Check for collisions between bullets and enemies, and between players and enemies.
     game->GetEntityManager()->checkCollisions(
         [&](const Bullet& b, uint64_t enemyId) {
-            uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::system_clock::now().time_since_epoch()).count();
             int damage = 10;
-            char hitBuffer[128];
-            snprintf(hitBuffer, sizeof(hitBuffer), "H|%llu|%llu|%llu|%d|%llu",
-                     b.id, enemyId, game->GetLocalPlayer().steamID.ConvertToUint64(), damage, timestamp);
-            game->GetNetworkManager()->SendGameplayMessage(std::string(hitBuffer));
-
             if (game->IsHost() && game->GetEnemies().count(enemyId)) {
                 Enemy& enemy = game->GetEnemies()[enemyId];
                 enemy.health -= damage;
@@ -158,27 +147,36 @@ void GameplayState::UpdatePlayingState(float dt) {
                     Player& shooter = game->GetLocalPlayer();
                     shooter.kills += 1;
                     shooter.money += 10;
-                    localPlayer = shooter; // Update local reference
-                    // Broadcast specific kill/money update
+                    localPlayer = shooter;
+                    std::cout << "[DEBUG] Host processed local kill for " << shooter.steamID.ConvertToUint64() << "\n";
+
                     char buffer[128];
                     int bytes = snprintf(buffer, sizeof(buffer), "P|D|%llu|k|%d|m|%d",
                                          shooter.steamID.ConvertToUint64(), shooter.kills, shooter.money);
                     if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                         game->GetNetworkManager()->broadcastMessage(std::string(buffer));
                     }
-                    // Broadcast enemy removal
                     bytes = snprintf(buffer, sizeof(buffer), "E|REMOVE|%llu", enemyId);
                     if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                         game->GetNetworkManager()->broadcastMessage(std::string(buffer));
                     }
                 }
-            } else if (!game->IsHost() && game->GetEnemies().count(enemyId)) {
-                Enemy& enemy = game->GetEnemies()[enemyId];
-                enemy.health -= damage;
-                if (enemy.health <= 0) {
-                    game->GetEntityManager()->getEnemies().erase(enemyId);
-                    std::cout << "[DEBUG] Client predicted kill for " << localPlayer.steamID.ConvertToUint64()
-                              << ", awaiting host confirmation.\n";
+            } else if (!game->IsHost()) { // Clients send hit message
+                uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::system_clock::now().time_since_epoch()).count();
+                char hitBuffer[128];
+                snprintf(hitBuffer, sizeof(hitBuffer), "H|%llu|%llu|%llu|%d|%llu",
+                         b.id, enemyId, game->GetLocalPlayer().steamID.ConvertToUint64(), damage, timestamp);
+                game->GetNetworkManager()->SendGameplayMessage(std::string(hitBuffer));
+
+                if (game->GetEnemies().count(enemyId)) {
+                    Enemy& enemy = game->GetEnemies()[enemyId];
+                    enemy.health -= damage;
+                    if (enemy.health <= 0) {
+                        game->GetEntityManager()->getEnemies().erase(enemyId);
+                        std::cout << "[DEBUG] Client predicted kill for " << localPlayer.steamID.ConvertToUint64()
+                                  << ", awaiting host confirmation.\n";
+                    }
                 }
             }
         },
@@ -199,14 +197,14 @@ void GameplayState::UpdatePlayingState(float dt) {
                     game->GetPlayers()[playerId] = player;
                     if (playerId == game->GetLocalPlayer().steamID) {
                         game->GetLocalPlayer() = player;
-                        localPlayer = player; // Update local reference
+                        localPlayer = player;
                     }
                 }
             }
         }
     );
 
-    // Process pending hits (for client-side delayed updates).
+    // Process pending hits (unchanged)
     for (auto it = pendingHits.begin(); it != pendingHits.end();) {
         it->retryTimer -= dt;
         if (it->retryTimer <= 0) {
@@ -228,7 +226,6 @@ void GameplayState::UpdatePlayingState(float dt) {
         }
     }
 }
-
 //---------------------------------------------------------
 // Process Event
 //---------------------------------------------------------
