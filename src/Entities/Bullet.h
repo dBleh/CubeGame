@@ -4,7 +4,7 @@
 #include <SFML/Graphics.hpp>
 #include "../Utils/Config.h" // Ensure BULLET_SPEED is defined here
 #include <iostream>
-
+#include <steam/steam_api.h>
 /**
  * @brief Represents a bullet projectile.
  *
@@ -25,7 +25,7 @@ struct Bullet {
     // --- Lifetime and Identification ---
     float lifetime;            // Time remaining before the bullet expires
     uint64_t id;               // Unique identifier for the bullet
-
+    CSteamID shooterSteamID; 
     // --- Member Functions ---
     void initialize(float startX, float startY, float targetX, float targetY);
     void update(float dt);

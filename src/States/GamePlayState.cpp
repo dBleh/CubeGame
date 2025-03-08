@@ -140,28 +140,39 @@ void GameplayState::UpdatePlayingState(float dt) {
         [&](const Bullet& b, uint64_t enemyId) {
             int damage = 10;
             if (game->IsHost() && game->GetEnemies().count(enemyId)) {
-                Enemy& enemy = game->GetEnemies()[enemyId];
-                enemy.health -= damage;
-                if (enemy.health <= 0) {
-                    game->GetEntityManager()->getEnemies().erase(enemyId);
-                    Player& shooter = game->GetLocalPlayer();
-                    shooter.kills += 1;
-                    shooter.money += 10;
-                    localPlayer = shooter;
-                    std::cout << "[DEBUG] Host processed local kill for " << shooter.steamID.ConvertToUint64() << "\n";
+                // Only process locally if the bullet belongs to the host
+                if (b.shooterSteamID == game->GetLocalPlayer().steamID) {
+                    Enemy& enemy = game->GetEnemies()[enemyId];
+                    enemy.health -= damage;
+                    if (enemy.health <= 0) {
+                        game->GetEntityManager()->getEnemies().erase(enemyId);
+                        Player& shooter = game->GetLocalPlayer();
+                        shooter.kills += 1;
+                        shooter.money += 10;
+                        localPlayer = shooter;
+                        std::cout << "[DEBUG] Host processed local kill for " << shooter.steamID.ConvertToUint64() << "\n";
 
-                    char buffer[128];
-                    int bytes = snprintf(buffer, sizeof(buffer), "P|D|%llu|k|%d|m|%d",
-                                         shooter.steamID.ConvertToUint64(), shooter.kills, shooter.money);
-                    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
-                        game->GetNetworkManager()->broadcastMessage(std::string(buffer));
+                        char buffer[128];
+                        int bytes = snprintf(buffer, sizeof(buffer), "P|D|%llu|k|%d|m|%d",
+                                             shooter.steamID.ConvertToUint64(), shooter.kills, shooter.money);
+                        if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
+                            game->GetNetworkManager()->broadcastMessage(std::string(buffer));
+                        }
+                        bytes = snprintf(buffer, sizeof(buffer), "E|REMOVE|%llu", enemyId);
+                        if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
+                            game->GetNetworkManager()->broadcastMessage(std::string(buffer));
+                        }
                     }
-                    bytes = snprintf(buffer, sizeof(buffer), "E|REMOVE|%llu", enemyId);
-                    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
-                        game->GetNetworkManager()->broadcastMessage(std::string(buffer));
-                    }
+                } else {
+                    // For client bullets, rely on hit message processing
+                    uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::system_clock::now().time_since_epoch()).count();
+                    char hitBuffer[128];
+                    snprintf(hitBuffer, sizeof(hitBuffer), "H|%llu|%llu|%llu|%d|%llu",
+                             b.id, enemyId, b.shooterSteamID.ConvertToUint64(), damage, timestamp);
+                    game->GetNetworkManager()->SendGameplayMessage(std::string(hitBuffer));
                 }
-            } else if (!game->IsHost()) { // Clients send hit message
+            } else if (!game->IsHost()) {
                 uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::system_clock::now().time_since_epoch()).count();
                 char hitBuffer[128];

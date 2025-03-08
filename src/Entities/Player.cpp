@@ -105,7 +105,7 @@ void Player::ShootBullet(CubeGame* game) {
     b.lifetime = 2.0f;
     b.renderedX = startX;
     b.renderedY = startY;
-
+    b.shooterSteamID = steamID; // Set the shooter's SteamID
     // Generate a unique bullet ID using the player's SteamID and a bullet counter.
     int bulletIdx = game->GetNextBulletId();
     uint64_t shooterSteamID = steamID.ConvertToUint64();
