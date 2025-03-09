@@ -8,9 +8,7 @@
  * Sets up the player's shape, initial position, movement speed, health,
  * currency, and ready status.
  */
-
-
- void Player::initialize() {
+void Player::initialize() {
     shape.setSize(sf::Vector2f(20.0f, 20.0f));
     shape.setFillColor(sf::Color::Blue);
     x = SCREEN_WIDTH / 2.f;
@@ -67,6 +65,13 @@ void Player::updateOrbitingCube(float dt) {
     orbitingCube.x = x + orbitingCube.radius * std::cos(orbitingCube.angle);
     orbitingCube.y = y + orbitingCube.radius * std::sin(orbitingCube.angle);
 }
+
+sf::FloatRect Player::getOrbitingCubeBounds() const {
+    return sf::FloatRect(orbitingCube.renderedX, orbitingCube.renderedY,
+                         orbitingCube.shape.getSize().x, orbitingCube.shape.getSize().y);
+}
+
+
 
 /**
  * @brief Handles movement based on keyboard input.
