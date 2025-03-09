@@ -123,10 +123,11 @@ void GameplayState::UpdatePlayingState(float dt) {
     if (localPlayer.isAlive) {
         bool playerMoved = localPlayer.move(dt);
         if (playerMoved) {
-            localPlayer.renderedX = localPlayer.x;
-            localPlayer.renderedY = localPlayer.y;
-            localPlayer.shape.setPosition(localPlayer.renderedX, localPlayer.renderedY);
-            game->GetNetworkManager()->ThrottledSendPlayerUpdate();
+            // Commenting out local position updates to test broadcasted positions
+            // localPlayer.renderedX = localPlayer.x;
+            // localPlayer.renderedY = localPlayer.y;
+            // localPlayer.shape.setPosition(localPlayer.renderedX, localPlayer.renderedY);
+            game->GetNetworkManager()->ThrottledSendPlayerUpdate(); // Still send the update to test network
         }
         if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
             Player& updatedLocalPlayer = game->GetLocalPlayer();
@@ -242,7 +243,9 @@ void GameplayState::UpdatePlayingState(float dt) {
     // Log client stats each frame (for debugging)
     if (!game->IsHost()) {
         std::cout << "[DEBUG] Client stats - Kills: " << localPlayer.kills 
-                  << ", Money: " << localPlayer.money << ", Health: " << localPlayer.health << "\n";
+                  << ", Money: " << localPlayer.money << ", Health: " << localPlayer.health 
+                  << ", X: " << localPlayer.x << ", Y: " << localPlayer.y 
+                  << ", RenderedX: " << localPlayer.renderedX << ", RenderedY: " << localPlayer.renderedY << "\n";
     }
 }
 //---------------------------------------------------------

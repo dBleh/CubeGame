@@ -211,7 +211,7 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
     }
     Player& p = game->entityManager->getPlayers()[id];
 
-    std::cout << "[DEBUG] Client received player update: " << msg << "\n";
+   
 
     if (id == game->localSteamID) {
         if (!isKeyValue) {
@@ -232,19 +232,19 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
                 else if (parts[i] == "ry") p.renderedY = std::stof(parts[i + 1]);
                 else if (parts[i] == "h") {
                     p.health = std::stoi(parts[i + 1]);
-                    std::cout << "[DEBUG] Client updated health for " << id.ConvertToUint64() << " to " << p.health << "\n";
+                   
                 }
                 else if (parts[i] == "a") {
                     p.isAlive = std::stoi(parts[i + 1]) != 0;
-                    std::cout << "[DEBUG] Client updated alive status for " << id.ConvertToUint64() << " to " << p.isAlive << "\n";
+                    
                 }
                 else if (parts[i] == "k") {
                     p.kills = std::stoi(parts[i + 1]);
-                    std::cout << "[DEBUG] Client updated kills for " << id.ConvertToUint64() << " to " << p.kills << "\n";
+                   
                 }
                 else if (parts[i] == "m") {
                     p.money = std::stoi(parts[i + 1]);
-                    std::cout << "[DEBUG] Client updated money for " << id.ConvertToUint64() << " to " << p.money << "\n";
+                    
                 }
                 i += 2;
             }
@@ -309,7 +309,7 @@ void NetworkManager::HandleEnemySpawn(const std::string& msg) {
             newEnemy.lastX = x;
             newEnemy.lastY = y;
             m_lastEnemyUpdateTime[enemyID] = timestamp;
-            std::cout << "[DEBUG] Client spawned enemy " << enemyID << " at (" << x << ", " << y << ")\n";
+            
         }
     } else {
         std::cout << "[DEBUG] Failed to parse enemy spawn: " << msg << "\n";
@@ -343,7 +343,7 @@ void NetworkManager::HandleEnemyDeath(const std::string& msg) {
         if (!m_lastEnemyUpdateTime.count(enemyID) || m_lastEnemyUpdateTime[enemyID] < timestamp) {
             game->entityManager->getEnemies().erase(enemyID);
             m_lastEnemyUpdateTime[enemyID] = timestamp;
-            std::cout << "[DEBUG] Enemy " << enemyID << " marked as dead by killer " << killerID << std::endl;
+           
         }
     }
 }
@@ -382,7 +382,7 @@ void NetworkManager::HandleEnemyRemove(const std::string& msg) {
     if (sscanf(msg.c_str(), "E|REMOVE|%llu", &enemyID) == 1) {
         if (game->entityManager->getEnemies().count(enemyID)) {
             game->entityManager->getEnemies().erase(enemyID);
-            std::cout << "[DEBUG] Removed enemy " << enemyID << " from client\n";
+    
         }
     }
 }
@@ -390,24 +390,22 @@ void NetworkManager::HandleHit(const std::string& msg, CSteamID sender) {
     uint64_t bulletId, enemyId, shooterSteamID, timestamp;
     int damage;
     if (sscanf(msg.c_str(), "H|%llu|%llu|%llu|%d|%llu", &bulletId, &enemyId, &shooterSteamID, &damage, &timestamp) != 5) {
-        std::cout << "[DEBUG] Failed to parse hit message: " << msg << "\n";
+
         return;
     }
     if (game->m_isHost) {
-        std::cout << "[DEBUG] HandleHit: shooterSteamID=" << shooterSteamID << ", sender=" << sender.ConvertToUint64() 
-                  << ", enemyId=" << enemyId << ", timestamp=" << timestamp << "\n";
+        
         if (game->entityManager->getEnemies().count(enemyId)) {
             Enemy& e = game->entityManager->getEnemies()[enemyId];
             // Only process if this is a new hit or a later timestamp
             if (!m_lastEnemyUpdateTime.count(enemyId) || m_lastEnemyUpdateTime[enemyId] < timestamp) {
-                std::cout << "[DEBUG] Processing hit on enemy " << enemyId << " with health " << e.health << "\n";
                 e.health -= damage;
                 m_lastEnemyUpdateTime[enemyId] = timestamp;
                 if (e.health <= 0) {
                     CSteamID shooterID(shooterSteamID);
                     if (game->entityManager->getPlayers().count(shooterID)) {
                         Player& shooter = game->entityManager->getPlayers()[shooterID];
-                        std::cout << "[DEBUG] Attributing kill to SteamID=" << shooterSteamID << "\n";
+                       
                         shooter.kills += 1;
                         shooter.money += 10;
 
@@ -420,8 +418,7 @@ void NetworkManager::HandleHit(const std::string& msg, CSteamID sender) {
                                              shooterSteamID, shooter.kills, shooter.money);
                         if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                             broadcastMessage(std::string(buffer));
-                            std::cout << "[DEBUG] Host broadcasted kill update: P|D|" << shooterSteamID 
-                                      << "|k|" << shooter.kills << "|m|" << shooter.money << "\n";
+                            
                         }
 
                         // Broadcast enemy removal
@@ -433,17 +430,10 @@ void NetworkManager::HandleHit(const std::string& msg, CSteamID sender) {
                         // Remove enemy and clear timestamp to allow new enemies with same ID
                         game->entityManager->getEnemies().erase(enemyId);
                         m_lastEnemyUpdateTime.erase(enemyId);
-                        std::cout << "[DEBUG] Enemy " << enemyId << " killed and removed\n";
-                    } else {
-                        std::cout << "[DEBUG] Shooter " << shooterSteamID << " not found in players list\n";
-                    }
+                        
+                    } 
                 }
-            } else {
-                std::cout << "[DEBUG] Hit rejected: timestamp " << timestamp 
-                          << " <= last update " << m_lastEnemyUpdateTime[enemyId] << " for enemy " << enemyId << "\n";
-            }
-        } else {
-            std::cout << "[DEBUG] Enemy " << enemyId << " not found on host\n";
+            } 
         }
     }
 }
