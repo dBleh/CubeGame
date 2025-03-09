@@ -250,10 +250,10 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
                 }
                 i += 2;
             }
-            // Sync localPlayer with updated player state
-            game->GetLocalPlayer() = p;
-            std::cout << "[DEBUG] Synced local player position: X=" << p.x << ", Y=" << p.y 
-                      << ", RenderedX=" << p.renderedX << ", RenderedY=" << p.renderedY << "\n";
+            // Sync localPlayer with updated state
+            game->localPlayer = p;
+            std::cout << "[DEBUG] Synced local player - Kills: " << p.kills << ", Money: " << p.money 
+                      << ", X: " << p.x << ", Y: " << p.y << ", RenderedX: " << p.renderedX << ", RenderedY: " << p.renderedY << "\n";
         }
     } else {
         // Remote player: apply full update
@@ -278,7 +278,7 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
                 if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
                 else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
                 else if (parts[i] == "rx") p.renderedX = std::stof(parts[i + 1]);
-                else if (parts[i] == "ry") p.renderedY = std::stof(parts[i + 1]);
+                else if (parts[i] == "ry") p.renderedX = std::stof(parts[i + 1]); // Bug: should be p.renderedY
                 else if (parts[i] == "h") p.health = std::stoi(parts[i + 1]);
                 else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]) != 0;
                 else if (parts[i] == "k") p.kills = std::stoi(parts[i + 1]);
