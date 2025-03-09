@@ -211,7 +211,7 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
     }
     Player& p = game->entityManager->getPlayers()[id];
 
-   
+    std::cout << "[DEBUG] Client received player update: " << msg << "\n";
 
     if (id == game->localSteamID) {
         if (!isKeyValue) {
@@ -222,6 +222,8 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
             p.y = std::stof(parts[3]);
             p.renderedX = std::stof(parts[4]);
             p.renderedY = std::stof(parts[5]);
+            std::cout << "[DEBUG] Updated local player position: X=" << p.x << ", Y=" << p.y 
+                      << ", RenderedX=" << p.renderedX << ", RenderedY=" << p.renderedY << "\n";
         } else {
             // Key-value update: apply specific fields from host
             size_t i = 3;
@@ -232,26 +234,26 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
                 else if (parts[i] == "ry") p.renderedY = std::stof(parts[i + 1]);
                 else if (parts[i] == "h") {
                     p.health = std::stoi(parts[i + 1]);
-                   
+                    std::cout << "[DEBUG] Client updated health for " << id.ConvertToUint64() << " to " << p.health << "\n";
                 }
                 else if (parts[i] == "a") {
                     p.isAlive = std::stoi(parts[i + 1]) != 0;
-                    
+                    std::cout << "[DEBUG] Client updated alive status for " << id.ConvertToUint64() << " to " << p.isAlive << "\n";
                 }
                 else if (parts[i] == "k") {
                     p.kills = std::stoi(parts[i + 1]);
-                   
+                    std::cout << "[DEBUG] Client updated kills for " << id.ConvertToUint64() << " to " << p.kills << "\n";
                 }
                 else if (parts[i] == "m") {
                     p.money = std::stoi(parts[i + 1]);
-                    
+                    std::cout << "[DEBUG] Client updated money for " << id.ConvertToUint64() << " to " << p.money << "\n";
                 }
                 i += 2;
             }
-            // Update local player reference
-            if (id == game->localSteamID) {
-                game->GetLocalPlayer() = p; // Ensure localPlayer reflects the updated state
-            }
+            // Sync localPlayer with updated player state
+            game->GetLocalPlayer() = p;
+            std::cout << "[DEBUG] Synced local player position: X=" << p.x << ", Y=" << p.y 
+                      << ", RenderedX=" << p.renderedX << ", RenderedY=" << p.renderedY << "\n";
         }
     } else {
         // Remote player: apply full update
@@ -268,6 +270,8 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
             p.ready = std::stoi(parts[8]) != 0;
             p.speed = std::stof(parts[10]);
             p.isAlive = std::stoi(parts[11]) != 0;
+            std::cout << "[DEBUG] Updated remote player " << id.ConvertToUint64() << " position: X=" << p.x 
+                      << ", Y=" << p.y << ", RenderedX=" << p.renderedX << ", RenderedY=" << p.renderedY << "\n";
         } else {
             size_t i = 3;
             while (i + 1 < parts.size()) {
@@ -285,7 +289,11 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
             }
             p.lastX = p.x;
             p.lastY = p.y;
+            std::cout << "[DEBUG] Updated remote player " << id.ConvertToUint64() << " position: X=" << p.x 
+                      << ", Y=" << p.y << ", RenderedX=" << p.renderedX << ", RenderedY=" << p.renderedY << "\n";
         }
+        // Update the shape position for rendering
+        p.shape.setPosition(p.renderedX, p.renderedY);
     }
 }
 void NetworkManager::HandleEnemySpawn(const std::string& msg) {
