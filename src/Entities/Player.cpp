@@ -8,7 +8,12 @@
  * Sets up the player's shape, initial position, movement speed, health,
  * currency, and ready status.
  */
+#include "Player.h"
+#include "../Core/CubeGame.h"
+#include <cmath>
+
 void Player::initialize() {
+    // Existing initialization...
     shape.setSize(sf::Vector2f(20.0f, 20.0f));
     shape.setFillColor(sf::Color::Blue);
     x = SCREEN_WIDTH / 2.f;
@@ -20,7 +25,39 @@ void Player::initialize() {
     health = 100;
     kills = 0;
     ready = false;
+    isAlive = true;
+
+    // Initialize orbiting cube
+    orbitingCube.x = x + orbitingCube.radius * std::cos(orbitingCube.angle);
+    orbitingCube.y = y + orbitingCube.radius * std::sin(orbitingCube.angle);
+    orbitingCube.renderedX = orbitingCube.x;
+    orbitingCube.renderedY = orbitingCube.y;
+    orbitingCube.lastX = orbitingCube.x;
+    orbitingCube.lastY = orbitingCube.y;
+    orbitingCube.shape.setPosition(orbitingCube.renderedX, orbitingCube.renderedY);
+    orbitingCube.active = true; // Activate by default (can be toggled later)
 }
+
+void Player::updateOrbitingCube(float dt) {
+    if (!orbitingCube.active || !isAlive) return;
+
+    orbitingCube.lastX = orbitingCube.x;
+    orbitingCube.lastY = orbitingCube.y;
+
+    // Update angle and position
+    orbitingCube.angle += orbitingCube.angularSpeed * dt;
+    if (orbitingCube.angle >= 2 * M_PI) orbitingCube.angle -= 2 * M_PI;
+
+    orbitingCube.x = x + orbitingCube.radius * std::cos(orbitingCube.angle);
+    orbitingCube.y = y + orbitingCube.radius * std::sin(orbitingCube.angle);
+}
+
+sf::FloatRect Player::getOrbitingCubeBounds() const {
+    return sf::FloatRect(orbitingCube.renderedX, orbitingCube.renderedY,
+                         orbitingCube.shape.getSize().x, orbitingCube.shape.getSize().y);
+}
+
+
 
 /**
  * @brief Handles movement based on keyboard input.

@@ -13,6 +13,25 @@
  * Provides methods for initialization, movement, applying boosts, and shooting.
  */
 struct Player {
+
+    struct OrbitingCube {
+        float x, y;              // Current position
+        float renderedX, renderedY; // Rendered (interpolated) position
+        float lastX, lastY;      // Previous position for interpolation
+        float radius;            // Distance from player
+        float angle;             // Current angle in radians
+        float angularSpeed;      // Speed of rotation (radians per second)
+        sf::RectangleShape shape;// Visual representation
+        bool active;             // Whether the cube is active
+
+        OrbitingCube() : x(0), y(0), renderedX(0), renderedY(0), lastX(0), lastY(0),
+                         radius(50.f), angle(0.f), angularSpeed(2.f), active(false) {
+            shape.setSize(sf::Vector2f(10.f, 10.f));
+            shape.setFillColor(sf::Color::Green);
+        }
+    };
+
+    OrbitingCube orbitingCube;
     //-------------------------------------------------------------------------
     // Graphical Data
     //-------------------------------------------------------------------------
@@ -45,6 +64,8 @@ struct Player {
     bool move(float dt);                  ///< Process movement input.
     void applySpeedBoost(float boostAmount); ///< Apply a temporary speed boost.
     void ShootBullet(class CubeGame* game);   ///< Fire a bullet (requires CubeGame context).
+    void updateOrbitingCube(float dt); // New method to update cube position
+    sf::FloatRect getOrbitingCubeBounds() const; // For collision detection
 };
 
 #endif // PLAYER_H

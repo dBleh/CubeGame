@@ -49,6 +49,9 @@ void EntityManager::updateEntities(float dt) {
             ++it;
         }
     }
+    for (auto& [id, player] : m_players) {
+        player.updateOrbitingCube(dt);
+    }
 
     // Refresh the collision grid for the current frame.
     updateCollisionGrid();
@@ -272,12 +275,20 @@ void EntityManager::interpolateEntities(float alpha, CubeGame* game) {
             // Local player: Use current position directly, no interpolation
             player.renderedX = player.x;
             player.renderedY = player.y;
+            player.orbitingCube.renderedX = player.orbitingCube.x;
+            player.orbitingCube.renderedY = player.orbitingCube.y;
         } else {
             // Remote players: Interpolate
             player.renderedX = player.lastX + (player.x - player.lastX) * alpha;
             player.renderedY = player.lastY + (player.y - player.lastY) * alpha;
+            player.orbitingCube.renderedX = player.orbitingCube.lastX + 
+                                           (player.orbitingCube.x - player.orbitingCube.lastX) * alpha;
+            player.orbitingCube.renderedY = player.orbitingCube.lastY + 
+                                           (player.orbitingCube.y - player.orbitingCube.lastY) * alpha;
         }
         player.shape.setPosition(player.renderedX, player.renderedY);
+        player.orbitingCube.shape.setPosition(player.orbitingCube.renderedX, 
+            player.orbitingCube.renderedY);
     }
     for (auto& [id, bullet] : m_bullets) {
         bullet.renderedX = bullet.lastX + (bullet.x - bullet.lastX) * alpha;
@@ -349,6 +360,75 @@ void EntityManager::checkCollisions(
             bulletIt = m_bullets.erase(bulletIt);
         } else {
             ++bulletIt;
+        }
+    }
+    for (auto& [playerId, player] : m_players) {
+        if (!player.orbitingCube.active || !player.isAlive) continue;
+
+        int cx = int(player.orbitingCube.renderedX / 100.f);
+        int cy = int(player.orbitingCube.renderedY / 100.f);
+        for (int dx = -1; dx <= 1; ++dx) {
+            for (int dy = -1; dy <= 1; ++dy) {
+                int key = (cx + dx) * 1000 + (cy + dy);
+                if (collisionGrid.count(key)) {
+                    auto& enemyIds = collisionGrid[key].enemyIds;
+                    for (auto it = enemyIds.begin(); it != enemyIds.end();) {
+                        Enemy& enemy = m_enemies[*it];
+                        if (enemy.health > 0 && 
+                            player.getOrbitingCubeBounds().intersects(enemy.getBounds())) {
+                            enemy.health -= 10; // Deal 10 damage (consistent with bullet)
+
+                            if (enemy.health <= 0) {
+                                // Increment player's kills and money
+                                player.kills += 1;
+                                player.money += 10;
+
+                                // Network update for enemy removal and player stats
+                                if (onEnemyUpdate) {
+                                    // Broadcast enemy removal
+                                    char removeBuffer[64];
+                                    int bytes = snprintf(removeBuffer, sizeof(removeBuffer), 
+                                                         "E|REMOVE|%llu", *it);
+                                    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(removeBuffer)) {
+                                        onEnemyUpdate(std::string(removeBuffer));
+                                    }
+
+                                    // Broadcast player update (kills and money)
+                                    char playerBuffer[128];
+                                    bytes = snprintf(playerBuffer, sizeof(playerBuffer), 
+                                                     "P|D|%llu|k|%d|m|%d",
+                                                     player.steamID.ConvertToUint64(), 
+                                                     player.kills, player.money);
+                                    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(playerBuffer)) {
+                                        onEnemyUpdate(std::string(playerBuffer));
+                                    }
+                                }
+
+                                // Remove enemy
+                                m_enemies.erase(*it);
+                                it = enemyIds.erase(it);
+                            } else {
+                                // Optional: Broadcast enemy health update if desired
+                                if (onEnemyUpdate) {
+                                    uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                        std::chrono::system_clock::now().time_since_epoch()).count();
+                                    char updateBuffer[128];
+                                    int bytes = snprintf(updateBuffer, sizeof(updateBuffer), 
+                                                         "E|UPDATE|%llu|%.1f|%.1f|%d|%.2f|%llu",
+                                                         enemy.id, enemy.x, enemy.y, enemy.health, 
+                                                         enemy.spawnDelay, timestamp);
+                                    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(updateBuffer)) {
+                                        onEnemyUpdate(std::string(updateBuffer));
+                                    }
+                                }
+                                ++it;
+                            }
+                        } else {
+                            ++it;
+                        }
+                    }
+                }
+            }
         }
     }
 

@@ -61,6 +61,7 @@ public:
     void ThrottledSendPlayerUpdate();
     void BroadcastEnemyDeath(uint64_t enemyId, CSteamID killerID);
     void HandleEnemyRemove(const std::string& msg);
+    void HandleCollisionsAndSync(float dt, CubeGame* game);
 private:
     std::map<CSteamID, uint64_t> m_lastPlayerUpdateTime;
     struct NetworkStats {

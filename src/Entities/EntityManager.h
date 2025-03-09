@@ -28,6 +28,13 @@ class CubeGame;
 class EntityManager {
 public:
     //-------------------------------------------------------------------------
+    // Spatial Collision Grid
+    //-------------------------------------------------------------------------
+    struct GridCell {
+        std::vector<uint64_t> enemyIds;   ///< IDs of enemies in this cell.
+        std::vector<uint64_t> bulletIds;  ///< IDs of bullets in this cell.
+    };
+    //-------------------------------------------------------------------------
     // Constructors & Destructor
     //-------------------------------------------------------------------------
     EntityManager();
@@ -36,6 +43,7 @@ public:
     //-------------------------------------------------------------------------
     // Accessor Methods
     //-------------------------------------------------------------------------
+    
     std::unordered_map<CSteamID, Player, CSteamIDHash>& getPlayers(); ///< Returns reference to the players map.
     std::unordered_map<uint64_t, Bullet>& getBullets();                 ///< Returns reference to the bullets map.
     std::unordered_map<uint64_t, Enemy>& getEnemies();                    ///< Returns reference to the enemies map.
@@ -54,6 +62,8 @@ public:
         std::function<void(const Bullet&, uint64_t enemyId)> onBulletEnemyCollision, ///< Callback for bullet-enemy collision.
         std::function<void(CSteamID playerId, uint64_t enemyId)> onEnemyPlayerCollision  ///< Callback for enemy-player collision.
     );
+    // The collision grid is keyed by a computed value: (x/100)*1000 + (y/100)
+    std::unordered_map<int, GridCell> collisionGrid;
 
     //-------------------------------------------------------------------------
     // Callback & Interpolation Methods
@@ -65,18 +75,9 @@ public:
 
 private:
     CubeGame* game;
-    //-------------------------------------------------------------------------
-    // Spatial Collision Grid
-    //-------------------------------------------------------------------------
-    struct GridCell {
-        std::vector<uint64_t> enemyIds;   ///< IDs of enemies in this cell.
-        std::vector<uint64_t> bulletIds;  ///< IDs of bullets in this cell.
-    };
+    
 
     void updateCollisionGrid(); ///< Updates the collision grid based on current entity positions.
-    
-    // The collision grid is keyed by a computed value: (x/100)*1000 + (y/100)
-    std::unordered_map<int, GridCell> collisionGrid;
 
     //-------------------------------------------------------------------------
     // Private Data Members
