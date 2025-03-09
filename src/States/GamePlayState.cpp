@@ -116,136 +116,112 @@ void GameplayState::StartNextLevelTimer(float duration) {
 //---------------------------------------------------------
 // Update Playing State
 //---------------------------------------------------------
-void GameplayState::UpdatePlayingState(float dt) {
-    UpdateCamera(dt);
+void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
+    std::vector<std::string> parts;
+    std::stringstream ss(msg);
+    std::string part;
+    while (std::getline(ss, part, '|')) parts.push_back(part);
 
-    Player& localPlayer = game->GetLocalPlayer();
-    if (localPlayer.isAlive) {
-        bool playerMoved = localPlayer.move(dt);
-        if (playerMoved) {
-            // Commenting out local position updates to test broadcasted positions
-            // localPlayer.renderedX = localPlayer.x;
-            // localPlayer.renderedY = localPlayer.y;
-            // localPlayer.shape.setPosition(localPlayer.renderedX, localPlayer.renderedY);
-            game->GetNetworkManager()->ThrottledSendPlayerUpdate(); // Still send the update to test network
-        }
-        if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
-            Player& updatedLocalPlayer = game->GetLocalPlayer();
-            if (updatedLocalPlayer.isAlive) {
-                updatedLocalPlayer.ShootBullet(game);
-            }
-        }
+    if (parts.empty() || parts[0] != "P") return;
+
+    bool isKeyValue = (parts.size() > 1 && parts[1] == "D");
+    size_t minParts = isKeyValue ? 3 : 12;
+    if (parts.size() < minParts) return;
+
+    size_t idIndex = isKeyValue ? 2 : 1;
+    CSteamID id(std::stoull(parts[idIndex]));
+
+    if (game->entityManager->getPlayers().count(id) == 0) {
+        Player newPlayer;
+        newPlayer.initialize();
+        newPlayer.steamID = id;
+        game->entityManager->getPlayers()[id] = newPlayer;
     }
+    Player& p = game->entityManager->getPlayers()[id];
 
-    game->GetEntityManager()->checkCollisions(
-        [&](const Bullet& b, uint64_t enemyId) {
-            int damage = 10;
-            if (game->IsHost() && game->GetEnemies().count(enemyId)) {
-                if (b.shooterSteamID == game->GetLocalPlayer().steamID) {
-                    Enemy& enemy = game->GetEnemies()[enemyId];
-                    enemy.health -= damage;
-                    if (enemy.health <= 0) {
-                        game->GetEntityManager()->getEnemies().erase(enemyId);
-                        Player& shooter = game->GetLocalPlayer();
-                        shooter.kills += 1;
-                        shooter.money += 10;
-                        localPlayer = shooter;
-                        std::cout << "[DEBUG] Host processed local kill for " << shooter.steamID.ConvertToUint64() << "\n";
+    std::cout << "[DEBUG] Client received player update: " << msg << "\n";
 
-                        char buffer[128];
-                        int bytes = snprintf(buffer, sizeof(buffer), "P|D|%llu|k|%d|m|%d",
-                                             shooter.steamID.ConvertToUint64(), shooter.kills, shooter.money);
-                        if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
-                            game->GetNetworkManager()->broadcastMessage(std::string(buffer));
-                            std::cout << "[DEBUG] Host broadcasted kill update: P|D|" << shooter.steamID.ConvertToUint64() 
-                                      << "|k|" << shooter.kills << "|m|" << shooter.money << "\n";
-                        }
-                        bytes = snprintf(buffer, sizeof(buffer), "E|REMOVE|%llu", enemyId);
-                        if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
-                            game->GetNetworkManager()->broadcastMessage(std::string(buffer));
-                        }
-                    }
-                } else {
-                    uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::system_clock::now().time_since_epoch()).count();
-                    char hitBuffer[128];
-                    snprintf(hitBuffer, sizeof(hitBuffer), "H|%llu|%llu|%llu|%d|%llu",
-                             b.id, enemyId, b.shooterSteamID.ConvertToUint64(), damage, timestamp);
-                    game->GetNetworkManager()->SendGameplayMessage(std::string(hitBuffer));
-                }
-            } else if (!game->IsHost()) {
-                uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::system_clock::now().time_since_epoch()).count();
-                char hitBuffer[128];
-                snprintf(hitBuffer, sizeof(hitBuffer), "H|%llu|%llu|%llu|%d|%llu",
-                         b.id, enemyId, game->GetLocalPlayer().steamID.ConvertToUint64(), damage, timestamp);
-                game->GetNetworkManager()->SendGameplayMessage(std::string(hitBuffer));
-
-                if (game->GetEnemies().count(enemyId)) {
-                    Enemy& enemy = game->GetEnemies()[enemyId];
-                    enemy.health -= damage;
-                    if (enemy.health <= 0) {
-                        game->GetEntityManager()->getEnemies().erase(enemyId);
-                        std::cout << "[DEBUG] Client predicted kill for " << localPlayer.steamID.ConvertToUint64()
-                                  << ", awaiting host confirmation. EnemyID=" << enemyId << "\n";
-                    }
-                }
-            }
-        },
-        [&](CSteamID playerId, uint64_t enemyId) {
-            if (game->GetPlayers().count(playerId)) {
-                Player& player = game->GetPlayers()[playerId];
-                if (player.isAlive && game->IsHost()) {
-                    player.health -= 10;
-                    if (player.health <= 0) {
-                        player.isAlive = false;
-                    }
-                    char buffer[128];
-                    int bytes = snprintf(buffer, sizeof(buffer), "P|D|%llu|h|%d|a|%d",
-                                         player.steamID.ConvertToUint64(), player.health, player.isAlive ? 1 : 0);
-                    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
-                        game->GetNetworkManager()->broadcastMessage(std::string(buffer));
-                        std::cout << "[DEBUG] Host broadcasted health update: P|D|" << player.steamID.ConvertToUint64() 
-                                  << "|h|" << player.health << "|a|" << (player.isAlive ? 1 : 0) << "\n";
-                    }
-                    game->GetPlayers()[playerId] = player;
-                    if (playerId == game->GetLocalPlayer().steamID) {
-                        game->GetLocalPlayer() = player;
-                        localPlayer = player;
-                    }
-                }
-            }
-        }
-    );
-
-    // Process pending hits
-    for (auto it = pendingHits.begin(); it != pendingHits.end();) {
-        it->retryTimer -= dt;
-        if (it->retryTimer <= 0) {
-            if (game->GetEnemies().count(it->enemyId)) {
-                uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::system_clock::now().time_since_epoch()).count();
-                int damage = 10;
-                char hitBuffer[128];
-                snprintf(hitBuffer, sizeof(hitBuffer), "H|%llu|%llu|%llu|%d|%llu",
-                         it->bulletId, it->enemyId, it->shooterSteamID, damage, timestamp);
-                game->GetNetworkManager()->SendGameplayMessage(std::string(hitBuffer));
-                it->retryTimer = 0.5f;
-                ++it;
-            } else {
-                it = pendingHits.erase(it);
-            }
+    if (id == game->localSteamID) {
+        if (!isKeyValue) {
+            // Full update: only apply position for local player, stats come from key-value updates
+            p.lastX = p.x;
+            p.lastY = p.y;
+            p.x = std::stof(parts[2]);
+            p.y = std::stof(parts[3]);
+            p.renderedX = std::stof(parts[4]);
+            p.renderedY = std::stof(parts[5]);
+            std::cout << "[DEBUG] Updated local player position: X=" << p.x << ", Y=" << p.y 
+                      << ", RenderedX=" << p.renderedX << ", RenderedY=" << p.renderedY << "\n";
         } else {
-            ++it;
+            // Key-value update: apply specific fields from host
+            size_t i = 3;
+            while (i + 1 < parts.size()) {
+                if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
+                else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
+                else if (parts[i] == "rx") p.renderedX = std::stof(parts[i + 1]);
+                else if (parts[i] == "ry") p.renderedY = std::stof(parts[i + 1]);
+                else if (parts[i] == "h") {
+                    p.health = std::stoi(parts[i + 1]);
+                    std::cout << "[DEBUG] Client updated health for " << id.ConvertToUint64() << " to " << p.health << "\n";
+                }
+                else if (parts[i] == "a") {
+                    p.isAlive = std::stoi(parts[i + 1]) != 0;
+                    std::cout << "[DEBUG] Client updated alive status for " << id.ConvertToUint64() << " to " << p.isAlive << "\n";
+                }
+                else if (parts[i] == "k") {
+                    p.kills = std::stoi(parts[i + 1]);
+                    std::cout << "[DEBUG] Client updated kills for " << id.ConvertToUint64() << " to " << p.kills << "\n";
+                }
+                else if (parts[i] == "m") {
+                    p.money = std::stoi(parts[i + 1]);
+                    std::cout << "[DEBUG] Client updated money for " << id.ConvertToUint64() << " to " << p.money << "\n";
+                }
+                i += 2;
+            }
+            // Sync localPlayer with updated player state
+            game->localPlayer = p;
+            std::cout << "[DEBUG] Synced local player position: X=" << p.x << ", Y=" << p.y 
+                      << ", RenderedX=" << p.renderedX << ", RenderedY=" << p.renderedY << "\n";
         }
-    }
-
-    // Log client stats each frame (for debugging)
-    if (!game->IsHost()) {
-        std::cout << "[DEBUG] Client stats - Kills: " << localPlayer.kills 
-                  << ", Money: " << localPlayer.money << ", Health: " << localPlayer.health 
-                  << ", X: " << localPlayer.x << ", Y: " << localPlayer.y 
-                  << ", RenderedX: " << localPlayer.renderedX << ", RenderedY: " << localPlayer.renderedY << "\n";
+    } else {
+        // Remote player: apply full update
+        if (!isKeyValue) {
+            p.lastX = p.x;
+            p.lastY = p.y;
+            p.x = std::stof(parts[2]);
+            p.y = std::stof(parts[3]);
+            p.renderedX = std::stof(parts[4]);
+            p.renderedY = std::stof(parts[5]);
+            p.health = std::stoi(parts[6]);
+            p.kills = std::stoi(parts[7]);
+            p.money = std::stoi(parts[9]);
+            p.ready = std::stoi(parts[8]) != 0;
+            p.speed = std::stof(parts[10]);
+            p.isAlive = std::stoi(parts[11]) != 0;
+            std::cout << "[DEBUG] Updated remote player " << id.ConvertToUint64() << " position: X=" << p.x 
+                      << ", Y=" << p.y << ", RenderedX=" << p.renderedX << ", RenderedY=" << p.renderedY << "\n";
+        } else {
+            size_t i = 3;
+            while (i + 1 < parts.size()) {
+                if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
+                else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
+                else if (parts[i] == "rx") p.renderedX = std::stof(parts[i + 1]);
+                else if (parts[i] == "ry") p.renderedY = std::stof(parts[i + 1]);
+                else if (parts[i] == "h") p.health = std::stoi(parts[i + 1]);
+                else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]) != 0;
+                else if (parts[i] == "k") p.kills = std::stoi(parts[i + 1]);
+                else if (parts[i] == "m") p.money = std::stoi(parts[i + 1]);
+                else if (parts[i] == "r") p.ready = std::stoi(parts[i + 1]) != 0;
+                else if (parts[i] == "s") p.speed = std::stof(parts[i + 1]);
+                i += 2;
+            }
+            p.lastX = p.x;
+            p.lastY = p.y;
+            std::cout << "[DEBUG] Updated remote player " << id.ConvertToUint64() << " position: X=" << p.x 
+                      << ", Y=" << p.y << ", RenderedX=" << p.renderedX << ", RenderedY=" << p.renderedY << "\n";
+        }
+        // Update the shape position for rendering
+        p.shape.setPosition(p.renderedX, p.renderedY);
     }
 }
 //---------------------------------------------------------
