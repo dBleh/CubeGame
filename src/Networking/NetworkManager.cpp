@@ -575,11 +575,10 @@ void NetworkManager::SendGameplayMessage(const std::string& msg) {
 }
 
 void NetworkManager::ThrottledSendPlayerUpdate() {
-    const float playerUpdateRate = 0.016f; // 62.5 Hz, adjustable
-    playerUpdateTimer += game->GetDeltaTime();
-    if (playerUpdateTimer >= playerUpdateRate) {
+    const float playerUpdateRate = 0.016f; // 62.5 Hz
+    if (m_playerUpdateClock.getElapsedTime().asSeconds() >= playerUpdateRate) {
         SendPlayerUpdate();
-        playerUpdateTimer -= playerUpdateRate; // Reset timer
+        m_playerUpdateClock.restart(); // Reset the clock after sending
     }
 }
 
