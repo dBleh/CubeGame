@@ -63,6 +63,7 @@ public:
     void HandleEnemyRemove(const std::string& msg);
     void HandleCollisionsAndSync(float dt, CubeGame* game);
 private:
+    std::unordered_map<CSteamID, uint64_t> lastUpdateTimes;    
     std::map<CSteamID, uint64_t> m_lastPlayerUpdateTime;
     struct NetworkStats {
         size_t bytesSent = 0;

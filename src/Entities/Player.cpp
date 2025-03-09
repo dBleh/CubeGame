@@ -39,14 +39,14 @@ void Player::initialize() {
     orbitingCube.active = true; // Activate by default (can be toggled later)
 }
 
-void Player::updateOrbitingCube(float dt, float fixedDt) {
+void Player::updateOrbitingCube(float dt) {
     if (!orbitingCube.active || !isAlive) return;
 
     orbitingCube.lastX = orbitingCube.x;
     orbitingCube.lastY = orbitingCube.y;
 
-    // Use fixed timestep for angle update to match network rate
-    orbitingCube.angle += orbitingCube.angularSpeed * fixedDt;
+    // Update angle based on real time (dt)
+    orbitingCube.angle += orbitingCube.angularSpeed * dt;
     if (orbitingCube.angle >= 2 * M_PI) orbitingCube.angle -= 2 * M_PI;
 
     // Calculate position based on angle

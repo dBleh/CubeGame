@@ -272,23 +272,20 @@ void EntityManager::interpolateEntities(float alpha, CubeGame* game) {
 
     for (auto& [id, player] : m_players) {
         if (id == game->GetLocalPlayer().steamID) {
-            // Local player: Use current position directly, no interpolation
+            // Local player: Use current position from updateOrbitingCube
             player.renderedX = player.x;
             player.renderedY = player.y;
             player.orbitingCube.renderedX = player.orbitingCube.x;
             player.orbitingCube.renderedY = player.orbitingCube.y;
         } else {
-            // Remote players: Interpolate
+            // Remote players: Interpolate player position, compute cube from angle
             player.renderedX = player.lastX + (player.x - player.lastX) * alpha;
             player.renderedY = player.lastY + (player.y - player.lastY) * alpha;
-            player.orbitingCube.renderedX = player.orbitingCube.lastX + 
-                                           (player.orbitingCube.x - player.orbitingCube.lastX) * alpha;
-            player.orbitingCube.renderedY = player.orbitingCube.lastY + 
-                                           (player.orbitingCube.y - player.orbitingCube.lastY) * alpha;
+            player.orbitingCube.renderedX = player.renderedX + player.orbitingCube.radius * std::cos(player.orbitingCube.angle);
+            player.orbitingCube.renderedY = player.renderedY + player.orbitingCube.radius * std::sin(player.orbitingCube.angle);
         }
         player.shape.setPosition(player.renderedX, player.renderedY);
-        player.orbitingCube.shape.setPosition(player.orbitingCube.renderedX, 
-            player.orbitingCube.renderedY);
+        player.orbitingCube.shape.setPosition(player.orbitingCube.renderedX, player.orbitingCube.renderedY);
     }
     for (auto& [id, bullet] : m_bullets) {
         bullet.renderedX = bullet.lastX + (bullet.x - bullet.lastX) * alpha;

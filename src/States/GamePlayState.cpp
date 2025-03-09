@@ -123,7 +123,7 @@ void GameplayState::UpdatePlayingState(float dt) {
     Player& localPlayer = game->GetLocalPlayer();
     if (localPlayer.isAlive) {
         bool playerMoved = localPlayer.move(dt);
-        localPlayer.updateOrbitingCube(dt, 0.016f);
+        localPlayer.updateOrbitingCube(dt); // Use real dt
         if (playerMoved) {
             localPlayer.renderedX = localPlayer.x;
             localPlayer.renderedY = localPlayer.y;
@@ -131,14 +131,13 @@ void GameplayState::UpdatePlayingState(float dt) {
             game->GetNetworkManager()->ThrottledSendPlayerUpdate();
         }
         if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
-            Player& updatedLocalPlayer = game->GetLocalPlayer(); // Changed to GetLocalClientPlayer for clarity
+            Player& updatedLocalPlayer = game->GetLocalClientPlayer();
             if (updatedLocalPlayer.isAlive) {
                 updatedLocalPlayer.ShootBullet(game);
             }
         }
     }
 
-    // Delegate collision handling and network synchronization to NetworkManager
     game->GetNetworkManager()->HandleCollisionsAndSync(dt, game);
 }
 
