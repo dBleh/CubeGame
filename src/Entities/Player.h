@@ -31,6 +31,7 @@ struct Player {
         }
     };
 
+    uint64_t startTimestamp = 0; // Time when orbiting began (in milliseconds)
     uint64_t lastUpdateTimestamp = 0;
 
     OrbitingCube orbitingCube;

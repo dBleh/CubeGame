@@ -23,7 +23,7 @@ void Player::initialize() {
     isAlive = true;
 
     // Initialize orbiting cube
-    orbitingCube.angle = 0.0f; // Start at angle 0
+    orbitingCube.angle = 0.0f;
     orbitingCube.x = x + orbitingCube.radius * std::cos(orbitingCube.angle);
     orbitingCube.y = y + orbitingCube.radius * std::sin(orbitingCube.angle);
     orbitingCube.renderedX = orbitingCube.x;
@@ -33,9 +33,10 @@ void Player::initialize() {
     orbitingCube.shape.setPosition(orbitingCube.renderedX, orbitingCube.renderedY);
     orbitingCube.active = true;
 
-    // Set initial timestamp
-    lastUpdateTimestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+    // Set start timestamp for continuous rotation
+    startTimestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
+    lastUpdateTimestamp = startTimestamp;
 }
 
 void Player::updateOrbitingCube(float dt) {
@@ -48,20 +49,16 @@ void Player::updateOrbitingCube(float dt) {
     uint64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
 
-    // Calculate elapsed time since last update in seconds
-    float elapsedTime = (now - lastUpdateTimestamp) / 1000.0f;
+    // Calculate total elapsed time since start in seconds
+    float elapsedTime = (now - startTimestamp) / 1000.0f;
 
-    // Update angle based on elapsed time since last sync
+    // Update angle based on total elapsed time
     orbitingCube.angle = orbitingCube.angularSpeed * elapsedTime;
 
     // Keep angle within [0, 2π)
-    if (orbitingCube.angle >= 2 * M_PI) {
-        orbitingCube.angle = std::fmod(orbitingCube.angle, 2 * M_PI);
-        // Optionally reset lastUpdateTimestamp to avoid drift over long periods
-        lastUpdateTimestamp = now - static_cast<uint64_t>((elapsedTime - orbitingCube.angle / orbitingCube.angularSpeed) * 1000.0f);
-    }
+    orbitingCube.angle = std::fmod(orbitingCube.angle, 2 * M_PI);
 
-    // Calculate position based on angle
+    // Update position based on player's current position and angle
     orbitingCube.x = x + orbitingCube.radius * std::cos(orbitingCube.angle);
     orbitingCube.y = y + orbitingCube.radius * std::sin(orbitingCube.angle);
 }
