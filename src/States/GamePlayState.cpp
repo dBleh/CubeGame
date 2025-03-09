@@ -123,7 +123,7 @@ void GameplayState::UpdatePlayingState(float dt) {
     Player& localPlayer = game->GetLocalPlayer();
     if (localPlayer.isAlive) {
         bool playerMoved = localPlayer.move(dt);
-        localPlayer.updateOrbitingCube(dt);
+        localPlayer.updateOrbitingCube(dt, 0.016f);
         if (playerMoved) {
             localPlayer.renderedX = localPlayer.x;
             localPlayer.renderedY = localPlayer.y;

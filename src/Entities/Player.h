@@ -64,7 +64,7 @@ struct Player {
     bool move(float dt);                  ///< Process movement input.
     void applySpeedBoost(float boostAmount); ///< Apply a temporary speed boost.
     void ShootBullet(class CubeGame* game);   ///< Fire a bullet (requires CubeGame context).
-    void updateOrbitingCube(float dt); // New method to update cube position
+    void updateOrbitingCube(float dt, float fixedDt = 0.016f); // New method to update cube position
     sf::FloatRect getOrbitingCubeBounds() const; // For collision detection
 };
 
