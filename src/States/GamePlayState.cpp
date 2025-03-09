@@ -179,7 +179,7 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
                 i += 2;
             }
             // Sync localPlayer with updated player state
-            game->localPlayer = p;
+            game->GetLocalPlayer() = p;
             std::cout << "[DEBUG] Synced local player position: X=" << p.x << ", Y=" << p.y 
                       << ", RenderedX=" << p.renderedX << ", RenderedY=" << p.renderedY << "\n";
         }
