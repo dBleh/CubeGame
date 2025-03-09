@@ -31,6 +31,8 @@ struct Player {
         }
     };
 
+    uint64_t lastUpdateTimestamp = 0;
+
     OrbitingCube orbitingCube;
     //-------------------------------------------------------------------------
     // Graphical Data

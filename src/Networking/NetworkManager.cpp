@@ -212,46 +212,23 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
     Player& p = game->entityManager->getPlayers()[id];
 
     if (id == game->localSteamID) {
-        if (!isKeyValue) {
-            // Full update: only apply position for local player, stats come from key-value updates
-            p.lastX = p.x;
-            p.lastY = p.y;
-            p.x = std::stof(parts[2]);
-            p.y = std::stof(parts[3]);
-            p.renderedX = std::stof(parts[4]);
-            p.renderedY = std::stof(parts[5]);
-            p.orbitingCube.lastX = p.orbitingCube.x;
-            p.orbitingCube.lastY = p.orbitingCube.y;
-            p.orbitingCube.x = p.x + p.orbitingCube.radius * std::cos(p.orbitingCube.angle);
-            p.orbitingCube.y = p.y + p.orbitingCube.radius * std::sin(p.orbitingCube.angle);
-        } else {
-            // Key-value update: apply specific fields from host
-            float receivedAngle = p.orbitingCube.angle; // Default to current angle
-            uint64_t receivedTimestamp = 0;
+        // Local player: handled by local updateOrbitingCube, only sync stats
+        if (isKeyValue) {
             size_t i = 3;
             while (i + 1 < parts.size()) {
                 if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
                 else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
-                else if (parts[i] == "rx") p.renderedX = std::stof(parts[i + 1]);
-                else if (parts[i] == "ry") p.renderedY = std::stof(parts[i + 1]);
                 else if (parts[i] == "h") p.health = std::stoi(parts[i + 1]);
                 else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]) != 0;
                 else if (parts[i] == "k") p.kills = std::stoi(parts[i + 1]);
                 else if (parts[i] == "m") p.money = std::stoi(parts[i + 1]);
-                else if (parts[i] == "oca") receivedAngle = std::stof(parts[i + 1]);
-                else if (parts[i] == "t") receivedTimestamp = std::stoull(parts[i + 1]);
+                else if (parts[i] == "t") p.lastUpdateTimestamp = std::stoull(parts[i + 1]);
                 i += 2;
             }
-            // For local player, only update angle if provided; local dt drives it otherwise
-            if (receivedTimestamp > 0) {
-                p.orbitingCube.angle = receivedAngle;
-            }
-            p.orbitingCube.x = p.x + p.orbitingCube.radius * std::cos(p.orbitingCube.angle);
-            p.orbitingCube.y = p.y + p.orbitingCube.radius * std::sin(p.orbitingCube.angle);
             game->GetLocalPlayer() = p;
         }
     } else {
-        // Remote player: apply updates and simulate orbiting cube based on time
+        // Remote player: apply updates and sync orbiting cube with timestamp
         if (!isKeyValue) {
             p.lastX = p.x;
             p.lastY = p.y;
@@ -261,17 +238,13 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
             p.renderedY = std::stof(parts[5]);
             p.health = std::stoi(parts[6]);
             p.kills = std::stoi(parts[7]);
-            p.money = std::stoi(parts[9]);
             p.ready = std::stoi(parts[8]) != 0;
+            p.money = std::stoi(parts[9]);
             p.speed = std::stof(parts[10]);
             p.isAlive = std::stoi(parts[11]) != 0;
-            p.orbitingCube.lastX = p.orbitingCube.x;
-            p.orbitingCube.lastY = p.orbitingCube.y;
-            p.orbitingCube.x = p.x + p.orbitingCube.radius * std::cos(p.orbitingCube.angle);
-            p.orbitingCube.y = p.y + p.orbitingCube.radius * std::sin(p.orbitingCube.angle);
         } else {
-            float receivedAngle = p.orbitingCube.angle; // Default to current angle
-            uint64_t receivedTimestamp = 0;
+            float receivedAngle = p.orbitingCube.angle;
+            uint64_t receivedTimestamp = p.lastUpdateTimestamp;
             size_t i = 3;
             while (i + 1 < parts.size()) {
                 if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
@@ -289,14 +262,19 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
                 i += 2;
             }
 
-            // Simulate orbiting cube angle for remote player based on elapsed time
-            if (receivedTimestamp > 0) {
-                uint64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::system_clock::now().time_since_epoch()).count();
-                float elapsedTime = (now - receivedTimestamp) / 1000.0f; // Convert ms to seconds
-                p.orbitingCube.angle = receivedAngle + p.orbitingCube.angularSpeed * elapsedTime;
-                if (p.orbitingCube.angle >= 2 * M_PI) p.orbitingCube.angle -= 2 * M_PI;
-                m_lastPlayerUpdateTime[id] = receivedTimestamp; // Update last timestamp
+            // Update timestamp and compute angle based on elapsed time
+            if (receivedTimestamp > p.lastUpdateTimestamp) {
+                p.lastUpdateTimestamp = receivedTimestamp;
+                p.orbitingCube.angle = receivedAngle;
+            }
+
+            // Calculate current angle based on elapsed time since last update
+            uint64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+            float elapsedTime = (now - p.lastUpdateTimestamp) / 1000.0f;
+            p.orbitingCube.angle = receivedAngle + p.orbitingCube.angularSpeed * elapsedTime;
+            if (p.orbitingCube.angle >= 2 * M_PI) {
+                p.orbitingCube.angle = std::fmod(p.orbitingCube.angle, 2 * M_PI);
             }
 
             p.orbitingCube.x = p.x + p.orbitingCube.radius * std::cos(p.orbitingCube.angle);
@@ -304,9 +282,8 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
             p.lastX = p.x;
             p.lastY = p.y;
         }
-        // Update the shape position for rendering
         p.shape.setPosition(p.renderedX, p.renderedY);
-        p.orbitingCube.shape.setPosition(p.orbitingCube.x, p.orbitingCube.y); // Use computed position directly
+        p.orbitingCube.shape.setPosition(p.orbitingCube.x, p.orbitingCube.y);
     }
 }
 void NetworkManager::HandleEnemySpawn(const std::string& msg) {
@@ -547,8 +524,8 @@ void NetworkManager::SendPlayerUpdate() {
         << "|m|" << p.money
         << "|s|" << p.speed
         << "|a|" << (p.isAlive ? 1 : 0)
-        << "|oca|" << p.orbitingCube.angle
-        << "|t|" << timestamp; // Add timestamp
+        << "|oca|" << p.orbitingCube.angle // Send current angle
+        << "|t|" << timestamp;             // Send current timestamp
 
     std::string msg = oss.str();
     if (game->m_isHost) {
@@ -560,6 +537,10 @@ void NetworkManager::SendPlayerUpdate() {
             sendMessage(hostID, msg);
         }
     }
+
+    // Update the player's lastUpdateTimestamp
+    p.lastUpdateTimestamp = timestamp;
+    game->entityManager->getPlayers()[game->localSteamID] = p;
 }
 
 void NetworkManager::SendGameplayMessage(const std::string& msg) {

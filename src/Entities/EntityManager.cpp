@@ -278,7 +278,7 @@ void EntityManager::interpolateEntities(float alpha, CubeGame* game) {
             player.orbitingCube.renderedX = player.orbitingCube.x;
             player.orbitingCube.renderedY = player.orbitingCube.y;
         } else {
-            // Remote players: Interpolate player position, compute cube from angle
+            // Remote players: Interpolate player position only, cube follows angle
             player.renderedX = player.lastX + (player.x - player.lastX) * alpha;
             player.renderedY = player.lastY + (player.y - player.lastY) * alpha;
             player.orbitingCube.renderedX = player.renderedX + player.orbitingCube.radius * std::cos(player.orbitingCube.angle);
