@@ -34,6 +34,7 @@ void Player::initialize() {
     orbitingCube.renderedY = orbitingCube.y;
     orbitingCube.lastX = orbitingCube.x;
     orbitingCube.lastY = orbitingCube.y;
+    
     orbitingCube.shape.setPosition(orbitingCube.renderedX, orbitingCube.renderedY);
     orbitingCube.active = true; // Activate by default (can be toggled later)
 }

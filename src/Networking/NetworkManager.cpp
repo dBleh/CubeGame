@@ -243,9 +243,11 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
                 else if (parts[i] == "m") {
                     p.money = std::stoi(parts[i + 1]);
                 }
+                else if (parts[i] == "oca") p.orbitingCube.angle = std::stof(parts[i + 1]);
                 i += 2;
             }
-            // Sync localPlayer with updated state
+            p.orbitingCube.x = p.x + p.orbitingCube.radius * std::cos(p.orbitingCube.angle);
+            p.orbitingCube.y = p.y + p.orbitingCube.radius * std::sin(p.orbitingCube.angle);
             game->GetLocalPlayer() = p;
         }
     } else {
@@ -280,15 +282,18 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
                 else if (parts[i] == "m") p.money = std::stoi(parts[i + 1]);
                 else if (parts[i] == "r") p.ready = std::stoi(parts[i + 1]) != 0;
                 else if (parts[i] == "s") p.speed = std::stof(parts[i + 1]);
+                else if (parts[i] == "oca") p.orbitingCube.angle = std::stof(parts[i + 1]);
                 i += 2;
             }
+            p.orbitingCube.x = p.x + p.orbitingCube.radius * std::cos(p.orbitingCube.angle);
+            p.orbitingCube.y = p.y + p.orbitingCube.radius * std::sin(p.orbitingCube.angle);
             p.lastX = p.x;
             p.lastY = p.y;
         }
         // Update the shape position for rendering
         p.shape.setPosition(p.renderedX, p.renderedY);
-        p.orbitingCube.shape.setPosition(p.orbitingCube.renderedX, p.orbitingCube.renderedY);
-    }
+        p.orbitingCube.shape.setPosition(p.orbitingCube.x, p.orbitingCube.y); // Use computed position directly
+         }
 }
 void NetworkManager::HandleEnemySpawn(const std::string& msg) {
     uint64_t enemyID, timestamp;
@@ -527,8 +532,7 @@ void NetworkManager::SendPlayerUpdate() {
         << "|m|" << p.money
         << "|s|" << p.speed
         << "|a|" << (p.isAlive ? 1 : 0)
-        << "|ocx|" << p.orbitingCube.x
-        << "|ocy|" << p.orbitingCube.y;
+        << "|oca|" << p.orbitingCube.angle;
 
     std::string msg = oss.str();
     if (game->m_isHost) {
