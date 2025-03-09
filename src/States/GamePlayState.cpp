@@ -131,7 +131,7 @@ void GameplayState::UpdatePlayingState(float dt) {
             game->GetNetworkManager()->ThrottledSendPlayerUpdate();
         }
         if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
-            Player& updatedLocalPlayer = game->GetLocalClientPlayer();
+            Player& updatedLocalPlayer = game->GetLocalPlayer();
             if (updatedLocalPlayer.isAlive) {
                 updatedLocalPlayer.ShootBullet(game);
             }

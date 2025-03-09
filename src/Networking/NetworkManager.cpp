@@ -296,7 +296,7 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
                 float elapsedTime = (now - receivedTimestamp) / 1000.0f; // Convert ms to seconds
                 p.orbitingCube.angle = receivedAngle + p.orbitingCube.angularSpeed * elapsedTime;
                 if (p.orbitingCube.angle >= 2 * M_PI) p.orbitingCube.angle -= 2 * M_PI;
-                lastUpdateTimes[id] = receivedTimestamp; // Update last timestamp
+                m_lastPlayerUpdateTime[id] = receivedTimestamp; // Update last timestamp
             }
 
             p.orbitingCube.x = p.x + p.orbitingCube.radius * std::cos(p.orbitingCube.angle);
@@ -575,10 +575,10 @@ void NetworkManager::SendGameplayMessage(const std::string& msg) {
 }
 
 void NetworkManager::ThrottledSendPlayerUpdate() {
-    const float playerUpdateRate = 0.016f; // 62.5 Hz
+    const float playerUpdateRate = 0.016f; 
     if (m_playerUpdateClock.getElapsedTime().asSeconds() >= playerUpdateRate) {
         SendPlayerUpdate();
-        m_playerUpdateClock.restart(); // Reset the clock after sending
+        m_playerUpdateClock.restart();
     }
 }
 
