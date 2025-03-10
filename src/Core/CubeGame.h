@@ -82,7 +82,7 @@ public:
      * @brief Renders the HUD layer on the window.
      */
     void RenderHUDLayer();
-
+    void SetShootCooldown(float coolDown){shootCooldown = coolDown;}
     //--------------------------------------------------------------------------
     // Accessor Methods
     //--------------------------------------------------------------------------

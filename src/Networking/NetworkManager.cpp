@@ -178,7 +178,7 @@ void NetworkManager::HandleEnemyUpdate(const std::string& msg) {
     uint64_t enemyID, timestamp;
     float x, y, spawnDelay;
     int health;
-    if (sscanf(msg.c_str(), "E|UPDATE|%llu|%f|%f|%d|%f|%llu", &enemyID, &x, &y, &health, &spawnDelay, ×tamp) == 6) {
+    if (sscanf(msg.c_str(), "E|UPDATE|%llu|%f|%f|%d|%f|%llu", &enemyID, &x, &y, &health, &spawnDelay, &timestamp) == 6) {
         if (!m_lastEnemyUpdateTime.count(enemyID) || m_lastEnemyUpdateTime[enemyID] < timestamp) {
             auto& enemies = game->entityManager->getEnemies();
             if (enemies.count(enemyID)) {
@@ -200,7 +200,7 @@ void NetworkManager::HandleEnemySpawn(const std::string& msg) {
     uint64_t enemyID, timestamp;
     float x, y, spawnDelay;
     int health;
-    if (sscanf(msg.c_str(), "E|SPAWN|%llu|%f|%f|%d|%f|%llu", &enemyID, &x, &y, &health, &spawnDelay, ×tamp) == 6) {
+    if (sscanf(msg.c_str(), "E|SPAWN|%llu|%f|%f|%d|%f|%llu", &enemyID, &x, &y, &health, &spawnDelay, &timestamp) == 6) {
         Enemy& e = game->entityManager->getEnemies()[enemyID];
         e.id = enemyID;
         e.x = e.renderedX = e.lastX = x;
