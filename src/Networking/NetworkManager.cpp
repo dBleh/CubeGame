@@ -73,17 +73,24 @@ bool NetworkManager::broadcastMessage(const std::string &msg) {
 
 void NetworkManager::processCallbacks() {
     SteamAPI_RunCallbacks();
-    
-    for (auto& [id, state] : m_playerStates) {
-        if (game->entityManager->getPlayers().count(id) > 0) {
-            Player& p = game->entityManager->getPlayers()[id];
-            if (id != game->localSteamID) {
-                float t = state.interpolationClock.getElapsedTime().asSeconds() / INTERPOLATION_TIME;
-                if (t <= 1.0f) {
-                    p.renderedX = state.lastX + (state.targetX - state.lastX) * t;
-                    p.renderedY = state.lastY + (state.targetY - state.lastY) * t;
-                    p.shape.setPosition(p.renderedX, p.renderedY);
+
+    for (auto& [id, player] : game->entityManager->getPlayers()) {
+        if (id != game->localSteamID) { // Only interpolate remote players
+            if (player.interpolationTime > 0.0f) {
+                float dt = m_playerUpdateClock.restart().asSeconds(); // Use a clock to measure real time
+                float t = std::min(1.0f, dt / player.interpolationTime); // Fraction of interpolation completed
+                player.renderedX = player.lastX + (player.targetX - player.lastX) * t;
+                player.renderedY = player.lastY + (player.targetY - player.lastY) * t;
+                player.interpolationTime -= dt;
+                if (player.interpolationTime <= 0.0f) {
+                    // Snap to target position when interpolation is complete
+                    player.renderedX = player.targetX;
+                    player.renderedY = player.targetY;
+                    player.lastX = player.renderedX;
+                    player.lastY = player.renderedY;
+                    player.interpolationTime = 0.0f;
                 }
+                player.shape.setPosition(player.renderedX, player.renderedY);
             }
         }
     }

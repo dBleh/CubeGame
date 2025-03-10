@@ -51,6 +51,7 @@ struct Player {
     float interpolationTime;      ///< Elapsed time used for interpolation.
     float velocityX = 0.0f;  // Velocity in X direction
     float velocityY = 0.0f;
+    static const float INTERPOLATION_TIME; // Define interpolation duration
     //-------------------------------------------------------------------------
     // Gameplay Properties
     //-------------------------------------------------------------------------

@@ -8,6 +8,8 @@
  * Sets up the player's shape, initial position, movement speed, health,
  * currency, and ready status.
  */
+
+ const float Player::INTERPOLATION_TIME = 0.1f; // 100ms interpolation time
 void Player::initialize() {
     shape.setSize(sf::Vector2f(20.0f, 20.0f));
     shape.setFillColor(sf::Color::Blue);
