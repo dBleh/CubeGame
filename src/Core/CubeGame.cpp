@@ -139,23 +139,30 @@ void CubeGame::Run() {
     sf::Clock clock;
     const float fixedDt = 1.0f / 60.0f;
     float accumulator = 0.0f;
+    float fullSyncTimer = 0.0f;
+    const float FULL_SYNC_INTERVAL = 5.0f; // Every 5 seconds
 
     while (window.isOpen()) {
         networkManager->processCallbacks();
-        networkManager->receiveMessages(); // Single point of receiving
-        networkManager->syncEntities(entityManager); // Sync flagged entities
-        entityManager->applyQueuedUpdates(); // Apply network updates
+        networkManager->receiveMessages();
+        networkManager->syncEntities(entityManager);
+        entityManager->applyQueuedUpdates();
 
         float frameTime = clock.restart().asSeconds();
         if (frameTime > 0.25f) frameTime = 0.25f;
         accumulator += frameTime;
+        fullSyncTimer += frameTime;
 
         while (accumulator >= fixedDt) {
             if (m_isHost) {
                 enemySyncTimer += fixedDt;
                 if (enemySyncTimer >= ENEMY_SYNC_INTERVAL) {
-                    networkManager->SyncEnemies(); // Existing periodic sync
+                    networkManager->SyncEnemies();
                     enemySyncTimer = 0.0f;
+                }
+                if (fullSyncTimer >= FULL_SYNC_INTERVAL) {
+                    networkManager->SyncEnemiesFull(); // Full sync every 5 seconds
+                    fullSyncTimer = 0.0f;
                 }
             }
             if (shootCooldown > 0) shootCooldown -= fixedDt;

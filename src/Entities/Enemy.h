@@ -28,6 +28,7 @@ struct Enemy {
     // --- Gameplay Properties ---
     int health;                  // Health value of the enemy
     uint64_t id;                 // Unique identifier
+    uint64_t deathSequence = 0;
     float spawnDelay;            // Delay before the enemy becomes active
     bool needsSync = false;
 
