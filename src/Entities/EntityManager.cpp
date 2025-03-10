@@ -290,6 +290,9 @@ void EntityManager::checkCollisions(
 ) {
     updateCollisionGrid();
 
+    static uint64_t deathSequence = 0; // Unique sequence number for deaths
+
+    // Bullet collisions
     for (auto bulletIt = m_bullets.begin(); bulletIt != m_bullets.end();) {
         bool bulletHit = false;
         int bx = int(bulletIt->second.renderedX / 100.f);
@@ -305,6 +308,11 @@ void EntityManager::checkCollisions(
                             bulletIt->second.shape.getGlobalBounds().intersects(enemy.getBounds())) {
                             onBulletEnemyCollision(bulletIt->second, enemyId);
                             bulletHit = true;
+                            if (enemy.health <= 0) {
+                                deathSequence++;
+                                enemy.needsSync = true; // Flag for sync
+                                enemy.deathSequence = deathSequence; // Store sequence
+                            }
                             break;
                         }
                     }
@@ -320,6 +328,7 @@ void EntityManager::checkCollisions(
         }
     }
 
+    // Orbiting cube collisions
     for (auto& [playerId, player] : m_players) {
         if (!player.orbitingCube.active || !player.isAlive) continue;
 
@@ -335,9 +344,10 @@ void EntityManager::checkCollisions(
                         if (enemy.health > 0 && 
                             player.getOrbitingCubeBounds().intersects(enemy.getBounds())) {
                             enemy.health -= 10;
-                            enemy.needsSync = true; // Flag for sync
-
+                            enemy.needsSync = true;
                             if (enemy.health <= 0) {
+                                deathSequence++;
+                                enemy.deathSequence = deathSequence;
                                 player.kills += 1;
                                 player.money += 10;
                                 m_enemies.erase(*it);
@@ -354,6 +364,7 @@ void EntityManager::checkCollisions(
         }
     }
 
+    // Player-enemy collisions
     for (auto playerIt = m_players.begin(); playerIt != m_players.end(); ++playerIt) {
         int px = int(playerIt->second.renderedX / 100.f);
         int py = int(playerIt->second.renderedY / 100.f);
@@ -366,7 +377,9 @@ void EntityManager::checkCollisions(
                         Enemy& enemy = m_enemies[*it];
                         if (playerIt->second.shape.getGlobalBounds().intersects(enemy.getBounds())) {
                             onEnemyPlayerCollision(playerIt->first, *it);
-                            enemy.needsSync = true; // Flag for sync
+                            enemy.needsSync = true;
+                            deathSequence++;
+                            enemy.deathSequence = deathSequence;
                             m_enemies.erase(*it);
                             it = enemyIds.erase(it);
                         } else {
