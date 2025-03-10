@@ -74,39 +74,42 @@ bool NetworkManager::broadcastMessage(const std::string &msg) {
 void NetworkManager::processCallbacks() {
     SteamAPI_RunCallbacks();
 
-    // Use a consistent clock for timing
-    static sf::Clock frameClock; // Move this to a member variable if needed
+    static sf::Clock frameClock;
     float dt = frameClock.restart().asSeconds();
 
     for (auto& [id, player] : game->entityManager->getPlayers()) {
         if (id != game->localSteamID) { // Only interpolate remote players
             if (player.interpolationTime > 0.0f) {
-                // Calculate interpolation progress
                 float t = std::min(1.0f, dt / Player::INTERPOLATION_TIME);
                 player.renderedX = player.lastX + (player.targetX - player.lastX) * t;
                 player.renderedY = player.lastY + (player.targetY - player.lastY) * t;
                 player.interpolationTime -= dt;
 
+
                 if (player.interpolationTime <= 0.0f) {
-                    // Snap to target when interpolation completes
                     player.renderedX = player.targetX;
                     player.renderedY = player.targetY;
                     player.lastX = player.renderedX;
                     player.lastY = player.renderedY;
                     player.interpolationTime = 0.0f;
                 }
-                // Ensure the shape follows the rendered position
                 player.shape.setPosition(player.renderedX, player.renderedY);
-                // Update orbiting cube position
                 player.orbitingCube.renderedX = player.renderedX + player.orbitingCube.radius * std::cos(player.orbitingCube.angle);
                 player.orbitingCube.renderedY = player.renderedY + player.orbitingCube.radius * std::sin(player.orbitingCube.angle);
                 player.orbitingCube.shape.setPosition(player.orbitingCube.renderedX, player.orbitingCube.renderedY);
+            } else if (player.renderedX != player.targetX || player.renderedY != player.targetY) {
+                // Snap to target if no interpolation is active but positions differ
+                
+                player.renderedX = player.targetX;
+                player.renderedY = player.targetY;
+                player.lastX = player.renderedX;
+                player.lastY = player.renderedY;
+                player.shape.setPosition(player.renderedX, player.renderedY);
             }
         }
     }
 
     if (usageClock.getElapsedTime().asSeconds() >= usageReportInterval) {
-        // ReportNetworkUsage();
         ResetNetworkUsage();
         usageClock.restart();
     }

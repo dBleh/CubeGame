@@ -192,7 +192,6 @@ void GameplayState::RenderPlayers() {
         }
     }
 }
-
 void GameplayState::RenderEnemies() {
     updateEnemyVertices();
     game->GetWindow().draw(enemyVertices);
