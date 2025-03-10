@@ -27,11 +27,9 @@
 #include "../Entities/Player.h"
 #include "../Hud/Hud.h"
 
-
 // Forward declaration of State classes.
 class State;
 class GameplayState;
-class EnemyNetworkHandler;
 
 /**
  * @brief The CubeGame class is the central class for the CubeShooter game.
@@ -51,7 +49,6 @@ public:
 
     // Returns the current GameplayState (if active).
     GameplayState* GetGameplayState();
-    State* GetState() { return state.get(); }
 
     //--------------------------------------------------------------------------
     // Constructors & Destructors
@@ -85,7 +82,7 @@ public:
      * @brief Renders the HUD layer on the window.
      */
     void RenderHUDLayer();
-    
+
     //--------------------------------------------------------------------------
     // Accessor Methods
     //--------------------------------------------------------------------------
@@ -153,7 +150,6 @@ public:
     void SyncEnemies();
     NetworkManager* GetNetworkManager() { return networkManager; }
     EntityManager* GetEntityManager() { return entityManager; }
-    EnemyNetworkHandler* GetEnemyHandler() { return enemyHandler; }
     bool AllPlayersReady();
     bool lobbyListUpdated = false; // Flag for lobby list update.
     CSteamID GetCurrentLobby() const { return m_currentLobby; }
@@ -218,9 +214,6 @@ private:
     NetworkManager* networkManager = nullptr;
     EntityManager* entityManager = nullptr;
     std::unique_ptr<EntityManager> entityManagerPtr;
-    EnemyNetworkHandler* enemyHandler;
-    
-    
     //--------------------------------------------------------------------------
     // Private Helper Methods
     //--------------------------------------------------------------------------

@@ -11,24 +11,13 @@
 #include "../Utils/Config.h"
 #include <chrono>
 #include <queue>
-
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
-
 // Forward declaration of CubeGame.
 class CubeGame;
-
-/**
- * @brief Manages game entities including players, bullets, and enemies.
- *
- * Maintains entity containers and a spatial collision grid for efficient
- * collision detection and updates. Provides functions for updating, spawning,
- * and interpolating entities.
- */
-
- struct EntityUpdate {
+struct EntityUpdate {
     enum class Type { Spawn, Update, Remove };
     Type type;
     uint64_t id;
@@ -38,8 +27,13 @@ class CubeGame;
     Enemy::Type enemyType; // For spawn
     uint64_t timestamp;
 };
-
-
+/**
+ * @brief Manages game entities including players, bullets, and enemies.
+ *
+ * Maintains entity containers and a spatial collision grid for efficient
+ * collision detection and updates. Provides functions for updating, spawning,
+ * and interpolating entities.
+ */
 class EntityManager {
 public:
     //-------------------------------------------------------------------------
@@ -49,8 +43,6 @@ public:
         std::vector<uint64_t> enemyIds;   ///< IDs of enemies in this cell.
         std::vector<uint64_t> bulletIds;  ///< IDs of bullets in this cell.
     };
-
-    
     //-------------------------------------------------------------------------
     // Constructors & Destructor
     //-------------------------------------------------------------------------
@@ -65,7 +57,6 @@ public:
     std::unordered_map<uint64_t, Bullet>& getBullets();                 ///< Returns reference to the bullets map.
     std::unordered_map<uint64_t, Enemy>& getEnemies();                    ///< Returns reference to the enemies map.
     Player& getLocalPlayer(CubeGame* game);                               ///< Returns the local player.
-    
 
     //-------------------------------------------------------------------------
     // Update & Spawn Methods
@@ -88,7 +79,7 @@ public:
     //-------------------------------------------------------------------------
     // Callback & Interpolation Methods
     //-------------------------------------------------------------------------
-    void setEnemyUpdateCallback(std::function<void(const std::string&)> callback); ///< Sets the enemy update callback.
+    //void setEnemyUpdateCallback(std::function<void(const std::string&)> callback); ///< Sets the enemy update callback.
     bool areEntitiesInitialized() const; ///< Returns true if there is at least one player.
     void interpolateEntities(float alpha, CubeGame* game);  ///< Interpolates positions for smooth rendering.
     
@@ -107,7 +98,7 @@ private:
     std::unordered_map<uint64_t, Bullet> m_bullets;                 ///< Container for bullets.
     std::unordered_map<uint64_t, Enemy> m_enemies;                    ///< Container for enemies.
     float lastEnemyUpdateTime;                                      ///< Accumulator for enemy updates.
-    std::function<void(const std::string&)> onEnemyUpdate;          ///< Callback for enemy update messages.
+    //std::function<void(const std::string&)> onEnemyUpdate;          ///< Callback for enemy update messages.
     std::queue<EntityUpdate> updateQueue;
 };
 

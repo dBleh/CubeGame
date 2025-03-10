@@ -9,44 +9,15 @@
 #include <unordered_map>
 #include <functional>
 #include "../Utils/SteamHelpers.h"
-#include "PlayerNetworkHandler.h"
 #include <vector>
 #include <chrono>
-#include <queue>
-#include <vector>
 
 class CubeGame;
 class EntityManager;
 
+
 class NetworkManager {
 public:
-    //-------------------------------------------------------------------------
-    // Message Priority
-    //-------------------------------------------------------------------------
-    enum class MessagePriority {
-        Critical = 0,  // Player updates, game state changes
-        High = 1,      // Bullet fires, hits
-        Medium = 2,    // Enemy updates
-        Low = 3        // Future use (e.g., chat, cosmetic updates)
-    }; 
-    //-------------------------------------------------------------------------
-    // Struct for queued messages
-    //-------------------------------------------------------------------------
-    struct NetworkMessage {
-        std::string content;
-        MessagePriority priority;
-        CSteamID target; // For sendMessage; use k_steamIDNil for broadcast
-        uint64_t timestamp; // For ordering and deduplication
-        float sendAfter; // Time to wait before sending (for throttling)
-
-        // Comparison for priority queue (lower priority value = higher urgency)
-        bool operator<(const NetworkMessage& other) const {
-            if (priority != other.priority) return static_cast<int>(priority) > static_cast<int>(other.priority);
-            return timestamp > other.timestamp; // Older messages first if same priority
-        }
-    };
-    PlayerNetworkHandler* playerHandler;
-    
     NetworkManager(bool debugMode = false, CubeGame* gameInstance = nullptr);
     ~NetworkManager();
     void JoinLobbyFromNetwork(CSteamID lobby);
@@ -63,8 +34,8 @@ public:
     void setIsConnectedToHost(bool b);
     
     // Message handlers
-    //void HandlePlayerLoaded(const std::string& msg);
-    //void HandlePlayerUpdate(const std::string& msg);
+    void HandlePlayerLoaded(const std::string& msg);
+    void HandlePlayerUpdate(const std::string& msg);
     void HandleEnemySpawn(const std::string& msg);
     void HandleEnemyUpdate(const std::string& msg);
     void HandleEnemyDeath(const std::string& msg);  // Handler for explicit death
@@ -84,22 +55,19 @@ public:
     // Network/game functions
     void ProcessNetworkMessages(const std::string& msg, CSteamID sender);
     void SendGameplayMessage(const std::string& msg);
-    void SendPlayerUpdate() { playerHandler->SendPlayerUpdate(); }
+    void SendPlayerUpdate();
     void SyncEnemies();
     void SyncEnemiesFull();                         // New function for full enemy sync
     void BroadcastEnemySpawns();
     void SpawnEnemiesAndBroadcast();
-    void ThrottledSendPlayerUpdate(float dt) { playerHandler->ThrottledSendPlayerUpdate(dt); }
+    void ThrottledSendPlayerUpdate();
     void BroadcastEnemyDeath(uint64_t enemyId, CSteamID killerID);
     void HandleEnemyRemove(const std::string& msg);
     void HandleCollisionsAndSync(float dt, CubeGame* game);
     void syncTimer(float timerValue);           // Sync next level timer
     void broadcastGameOver();                   // Signal game over
     void syncLevelTransition(float duration);
-    void syncEntities(EntityManager* em);
-
-    void queueMessage(const std::string& content, MessagePriority priority, CSteamID target = k_steamIDNil);
-    void processMessageQueue(float dt); // New method to send queued messages
+    void syncEntities(EntityManager* em); // Sync flagged entities
 private:
     std::map<CSteamID, uint64_t> m_lastPlayerUpdateTime;
     struct NetworkStats {
@@ -132,9 +100,6 @@ private:
     sf::Clock usageClock;
     float usageReportInterval = 10.0f;
     const float INTERPOLATION_TIME = 0.1f;
-    std::priority_queue<NetworkMessage> messageQueue;
-    float timeSinceLastSend = 0.0f;
-    
     
     STEAM_CALLBACK(NetworkManager, OnLobbyCreated, LobbyCreated_t, m_cbLobbyCreated);
     STEAM_CALLBACK(NetworkManager, OnGameLobbyJoinRequested, GameLobbyJoinRequested_t, m_cbGameLobbyJoinRequested);

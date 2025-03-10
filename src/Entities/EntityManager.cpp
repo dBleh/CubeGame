@@ -373,9 +373,7 @@ void EntityManager::checkCollisions(
 //-------------------------------------------------------------------------
 // Set Enemy Update Callback
 //-------------------------------------------------------------------------
-void EntityManager::setEnemyUpdateCallback(std::function<void(const std::string&)> callback) {
-    onEnemyUpdate = callback;
-}
+
 
 //-------------------------------------------------------------------------
 // Check if Entities are Initialized
@@ -384,7 +382,6 @@ bool EntityManager::areEntitiesInitialized() const {
     // Simple check: there should be at least one player.
     return !m_players.empty();
 }
-
 
 void EntityManager::queueUpdate(const EntityUpdate& update) {
     updateQueue.push(update);

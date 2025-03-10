@@ -119,7 +119,7 @@ void GameplayState::UpdatePlayingState(float dt) {
             localPlayer.renderedX = localPlayer.x;
             localPlayer.renderedY = localPlayer.y;
             localPlayer.shape.setPosition(localPlayer.renderedX, localPlayer.renderedY);
-            game->GetNetworkManager()->ThrottledSendPlayerUpdate(dt);
+            game->GetNetworkManager()->ThrottledSendPlayerUpdate();
         }
         if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
             Player& updatedLocalPlayer = game->GetLocalPlayer();
@@ -259,6 +259,7 @@ void GameplayState::NextLevel() {
         game->GetNetworkManager()->SyncEnemiesFull();
     }
 }
+
 void GameplayState::HandleStorePurchase() {
     sf::Vector2i mousePos = sf::Mouse::getPosition(game->GetWindow());
     sf::Vector2f viewPos = game->GetWindow().mapPixelToCoords(mousePos, game->GetView());
@@ -268,7 +269,7 @@ void GameplayState::HandleStorePurchase() {
         localPlayer.money -= 50;
         localPlayer.speed += 50.f;
         game->GetPlayers()[localPlayer.steamID] = localPlayer;
-
+        game->GetNetworkManager()->ThrottledSendPlayerUpdate();
     }
 }
 

@@ -141,12 +141,10 @@ void CubeGame::Run() {
         networkManager->processCallbacks();
         networkManager->receiveMessages(); // Single point of receiving
         networkManager->syncEntities(entityManager); // Sync flagged entities
-        networkManager->processMessageQueue(fixedDt); // Process queued messages
-        entityManager->applyQueuedUpdates();
+        entityManager->applyQueuedUpdates(); // Apply network updates
 
         float frameTime = clock.restart().asSeconds();
         if (frameTime > 0.25f) frameTime = 0.25f;
-        deltaTime = frameTime; // Update deltaTime for consistency
         accumulator += frameTime;
 
         while (accumulator >= fixedDt) {
@@ -159,9 +157,6 @@ void CubeGame::Run() {
             }
             if (shootCooldown > 0) shootCooldown -= fixedDt;
             if (state) state->Update(fixedDt);
-            if (currentState == GameState::Playing) {
-                networkManager->ThrottledSendPlayerUpdate(fixedDt); // Throttle player updates
-            }
             accumulator -= fixedDt;
         }
 
@@ -259,8 +254,9 @@ void CubeGame::ToggleReady() {
     localPlayer.ready = !localPlayer.ready;
     SteamMatchmaking()->SetLobbyMemberData(m_currentLobby, "ready", localPlayer.ready ? "1" : "0");
     entityManager->getPlayers()[localSteamID].ready = localPlayer.ready;
-    networkManager->playerHandler->SendPlayerUpdate(); // Keep direct call for immediate sync
+    networkManager->SendPlayerUpdate();
 }
+
 // Returns to the lobby, resetting player and game state for a new session.
 void CubeGame::ReturnToLobby() {
     inLobby = true;

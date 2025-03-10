@@ -3,13 +3,14 @@
 
 #include <SFML/Graphics.hpp>
 #include "../Utils/Config.h"
-const float INTERPOLATION_TIME = 0.1f;
+
 /**
  * @brief Represents an enemy entity in the game.
  *
  * The Enemy struct holds data for position, movement, health, and special
  * behaviors such as splitting. It also stores graphical properties for rendering.
  */
+const float INTERPOLATION_TIME = 0.1f;
 struct Enemy {
     // --- Graphical and Rendering Data ---
     sf::RectangleShape shape;    // Shape used for rendering (can be replaced with color batching)
