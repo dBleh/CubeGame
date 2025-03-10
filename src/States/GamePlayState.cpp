@@ -119,7 +119,7 @@ void GameplayState::UpdatePlayingState(float dt) {
         localPlayer.renderedX = localPlayer.x;
         localPlayer.renderedY = localPlayer.y;
         localPlayer.shape.setPosition(localPlayer.renderedX, localPlayer.renderedY);
-        game->GetNetworkManager()->ThrottledSendPlayerUpdate(); // Always send update
+        //game->GetNetworkManager()->ThrottledSendPlayerUpdate(); // Always send update
 
         if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
             Player& updatedLocalPlayer = game->GetLocalPlayer();
@@ -129,9 +129,7 @@ void GameplayState::UpdatePlayingState(float dt) {
         }
     }
 
-    if (game->IsHost()) {
-        game->GetNetworkManager()->HandleCollisionsAndSync(dt, game);
-    }
+    game->GetNetworkManager()->HandleCollisionsAndSync(dt, game);
 }
 
 //---------------------------------------------------------
