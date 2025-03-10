@@ -115,7 +115,7 @@ void Player::ShootBullet(CubeGame* game) {
     if (!isAlive || game->GetShootCooldown()> 0) return;
 
     Bullet b;
-    b.id = id;
+    
     b.shooterSteamID = steamID;
     static uint64_t bulletId = 0;
     b.id = bulletId++;
@@ -131,16 +131,16 @@ void Player::ShootBullet(CubeGame* game) {
     b.velocityY = (dy / magnitude) * BULLET_SPEED;
 
     game->GetEntityManager()->getBullets()[b.id] = b;
-    game->SetShootCooldown() = 0.15f;
+    game->SetShootCooldown( 0.15f);
 
     char buffer[128];
     int bytes = snprintf(buffer, sizeof(buffer), "B|%llu|%llu|%.1f|%.1f|%.1f|%.1f",
-                         b.id, shooterSteamID.ConvertToUint64(), b.x, b.y, b.velocityX, b.velocityY);
+                         b.id, steamID.ConvertToUint64(), b.x, b.y, b.velocityX, b.velocityY);
     if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
         if (game->IsHost()) {
             game->GetNetworkManager()->broadcastMessage(std::string(buffer));
         } else {
-            CSteamID hostID(std::stoull(SteamMatchmaking()->GetLobbyData(game->m_currentLobby, "host_steam_id")));
+            CSteamID hostID(std::stoull(SteamMatchmaking()->GetLobbyData(game->GetLobbyID(), "host_steam_id")));
             game->GetNetworkManager()->sendMessage(hostID, std::string(buffer));
         }
     }

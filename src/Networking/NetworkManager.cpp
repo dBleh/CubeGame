@@ -213,28 +213,6 @@ void NetworkManager::HandleEnemySpawn(const std::string& msg) {
     }
 }
 
-void NetworkManager::HandleEnemyUpdate(const std::string& msg) {
-    uint64_t enemyID, timestamp;
-    float x, y, spawnDelay;
-    int health;
-    if (sscanf(msg.c_str(), "E|UPDATE|%llu|%f|%f|%d|%f|%llu", &enemyID, &x, &y, &health, &spawnDelay, &timestamp) == 6) {
-        if (!m_lastEnemyUpdateTime.count(enemyID) || m_lastEnemyUpdateTime[enemyID] < timestamp) {
-            if (game->entityManager->getEnemies().count(enemyID) > 0) {
-                Enemy& e = game->entityManager->getEnemies()[enemyID];
-                if (e.deathSequence == 0 || timestamp > e.deathSequence) { // Only update if not dead or timestamp is newer
-                    e.lastX = e.renderedX;
-                    e.lastY = e.renderedY;
-                    e.x = x;
-                    e.y = y;
-                    e.health = health;
-                    e.spawnDelay = spawnDelay;
-                    e.interpolationTime = INTERPOLATION_TIME;
-                    m_lastEnemyUpdateTime[enemyID] = timestamp;
-                }
-            }
-        }
-    }
-}
 
 void NetworkManager::HandleEnemyRemove(const std::string& msg) {
     uint64_t enemyID;
