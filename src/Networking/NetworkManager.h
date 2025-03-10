@@ -99,7 +99,7 @@ private:
     std::map<std::string, NetworkStats> networkUsage;
     sf::Clock usageClock;
     float usageReportInterval = 10.0f;
-    const float INTERPOLATION_TIME = 0.1f;
+    const float INTERPOLATION_TIME = 0.033f;
     
     STEAM_CALLBACK(NetworkManager, OnLobbyCreated, LobbyCreated_t, m_cbLobbyCreated);
     STEAM_CALLBACK(NetworkManager, OnGameLobbyJoinRequested, GameLobbyJoinRequested_t, m_cbGameLobbyJoinRequested);
