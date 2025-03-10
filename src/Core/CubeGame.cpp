@@ -71,12 +71,10 @@ std::string CubeGame::FormatPlayerUpdate(const Player& p) {
 //--------------------------------------
 // Constructor & Initialization
 //--------------------------------------
-CubeGame::CubeGame() : hud(font)
-{
+CubeGame::CubeGame() : hud(font) {
     networkManager = new NetworkManager(debugMode, this);
     entityManager = new EntityManager();
 
-    // Initialize Steam API unless in debug mode.
     if (!debugMode) {
         if (!SteamAPI_Init()) {
             std::cerr << "[ERROR] Steam API initialization failed!" << std::endl;
@@ -84,40 +82,27 @@ CubeGame::CubeGame() : hud(font)
         }
     }
 
-    // Create game window and set framerate.
     window.create(sf::VideoMode(SCREEN_WIDTH, SCREEN_HEIGHT), "Multiplayer Lobby System");
     if (!window.isOpen()) std::exit(1);
     window.setFramerateLimit(60);
 
-    // Load the game font.
     if (!font.loadFromFile("Roboto-Regular.ttf")) {
         std::cerr << "[ERROR] Failed to load font!" << std::endl;
     }
 
-    // Set local Steam ID based on debug mode.
     if (!debugMode && SteamUser() && SteamUser()->BLoggedOn()) {
         localSteamID = SteamUser()->GetSteamID();
     } else if (debugMode) {
         localSteamID = CSteamID(76561198000000000ULL + 1);
     }
 
-    // Initialize local player in the entity manager.
     entityManager->getPlayers()[localSteamID].initialize();
     entityManager->getPlayers()[localSteamID].steamID = localSteamID;
 
-    // Set up view and timing.
     ResetViewToDefault();
     AdjustViewToWindow();
     shootCooldown = 0.0f;
     deltaTime = 0.0f;
-    // Removed SetupInitialHUD – HUD elements are now set up in the appropriate states.
-
-    // Set callback for enemy updates.
-    entityManager->setEnemyUpdateCallback([this](const std::string& msg) {
-        if (m_isHost) {
-            networkManager->broadcastMessage(msg);
-        }
-    });
 }
 
 // Returns the current GameplayState if active.
@@ -149,41 +134,43 @@ float CubeGame::GetDeltaTime() const {
 //--------------------------------------
 void CubeGame::Run() {
     sf::Clock clock;
-    const float fixedDt = 1.0f / 60.0f; // Fixed timestep: 60 updates per second
+    const float fixedDt = 1.0f / 60.0f;
     float accumulator = 0.0f;
 
     while (window.isOpen()) {
-        // Process network and events
         networkManager->processCallbacks();
-        networkManager->receiveMessages();
+        networkManager->receiveMessages(); // Single point of receiving
+        networkManager->syncEntities(entityManager); // Sync flagged entities
+        networkManager->processMessageQueue(fixedDt); // Process queued messages
+        entityManager->applyQueuedUpdates();
 
-        // Calculate elapsed time since last frame
         float frameTime = clock.restart().asSeconds();
-        if (frameTime > 0.25f) frameTime = 0.25f; // Cap to prevent spiral of death
+        if (frameTime > 0.25f) frameTime = 0.25f;
+        deltaTime = frameTime; // Update deltaTime for consistency
         accumulator += frameTime;
 
-        // Update game logic with fixed timestep
         while (accumulator >= fixedDt) {
             if (m_isHost) {
                 enemySyncTimer += fixedDt;
                 if (enemySyncTimer >= ENEMY_SYNC_INTERVAL) {
-                    networkManager->SyncEnemies();
+                    networkManager->SyncEnemies(); // Existing periodic sync
                     enemySyncTimer = 0.0f;
                 }
             }
             if (shootCooldown > 0) shootCooldown -= fixedDt;
-            if (state) state->Update(fixedDt); // Logic update with fixed timestep
+            if (state) state->Update(fixedDt);
+            if (currentState == GameState::Playing) {
+                networkManager->ThrottledSendPlayerUpdate(fixedDt); // Throttle player updates
+            }
             accumulator -= fixedDt;
         }
 
-        // Handle events
         sf::Event event;
         while (window.pollEvent(event)) {
             ProcessEvents(event);
             if (state) state->ProcessEvent(event);
         }
 
-        // State management
         switch (currentState) {
             case GameState::MainMenu:
                 if (!state || !dynamic_cast<MainMenuState*>(state.get()))
@@ -213,11 +200,10 @@ void CubeGame::Run() {
                 break;
         }
 
-        // Calculate interpolation factor (alpha) for rendering
-        float alpha = accumulator / fixedDt; // Between 0 and 1
+        float alpha = accumulator / fixedDt;
         if (state) {
-            state->Interpolate(alpha); // New method to interpolate positions
-            state->Render();           // Render with interpolated positions
+            state->Interpolate(alpha);
+            state->Render();
         }
     }
 }
@@ -273,9 +259,8 @@ void CubeGame::ToggleReady() {
     localPlayer.ready = !localPlayer.ready;
     SteamMatchmaking()->SetLobbyMemberData(m_currentLobby, "ready", localPlayer.ready ? "1" : "0");
     entityManager->getPlayers()[localSteamID].ready = localPlayer.ready;
-    networkManager->SendPlayerUpdate();
+    networkManager->playerHandler->SendPlayerUpdate(); // Keep direct call for immediate sync
 }
-
 // Returns to the lobby, resetting player and game state for a new session.
 void CubeGame::ReturnToLobby() {
     inLobby = true;

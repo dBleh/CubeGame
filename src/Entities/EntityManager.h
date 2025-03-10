@@ -10,10 +10,12 @@
 #include "../Utils/SteamHelpers.h"
 #include "../Utils/Config.h"
 #include <chrono>
+#include <queue>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+
 
 // Forward declaration of CubeGame.
 class CubeGame;
@@ -25,6 +27,19 @@ class CubeGame;
  * collision detection and updates. Provides functions for updating, spawning,
  * and interpolating entities.
  */
+
+ struct EntityUpdate {
+    enum class Type { Spawn, Update, Remove };
+    Type type;
+    uint64_t id;
+    float x, y;
+    int health;
+    float spawnDelay;
+    Enemy::Type enemyType; // For spawn
+    uint64_t timestamp;
+};
+
+
 class EntityManager {
 public:
     //-------------------------------------------------------------------------
@@ -34,6 +49,8 @@ public:
         std::vector<uint64_t> enemyIds;   ///< IDs of enemies in this cell.
         std::vector<uint64_t> bulletIds;  ///< IDs of bullets in this cell.
     };
+
+    
     //-------------------------------------------------------------------------
     // Constructors & Destructor
     //-------------------------------------------------------------------------
@@ -48,12 +65,15 @@ public:
     std::unordered_map<uint64_t, Bullet>& getBullets();                 ///< Returns reference to the bullets map.
     std::unordered_map<uint64_t, Enemy>& getEnemies();                    ///< Returns reference to the enemies map.
     Player& getLocalPlayer(CubeGame* game);                               ///< Returns the local player.
+    
 
     //-------------------------------------------------------------------------
     // Update & Spawn Methods
     //-------------------------------------------------------------------------
     void updateEntities(float dt); ///< Updates players, bullets, and enemies.
     void spawnEnemies(int enemiesPerWave, const std::unordered_map<CSteamID, Player, CSteamIDHash>& players, uint64_t hostID); ///< Spawns a new wave of enemies.
+    void queueUpdate(const EntityUpdate& update);
+    void applyQueuedUpdates();
 
     //-------------------------------------------------------------------------
     // Collision Detection
@@ -88,6 +108,7 @@ private:
     std::unordered_map<uint64_t, Enemy> m_enemies;                    ///< Container for enemies.
     float lastEnemyUpdateTime;                                      ///< Accumulator for enemy updates.
     std::function<void(const std::string&)> onEnemyUpdate;          ///< Callback for enemy update messages.
+    std::queue<EntityUpdate> updateQueue;
 };
 
 #endif // ENTITYMANAGER_H

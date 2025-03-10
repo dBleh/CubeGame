@@ -19,6 +19,7 @@ NetworkManager::NetworkManager(bool debugMode, CubeGame* gameInstance)
       m_cbP2PSessionConnectFail(this, &NetworkManager::OnP2PSessionConnectFail),
       m_cbLobbyMatchList(this, &NetworkManager::OnLobbyMatchList)
 {
+    playerHandler = new PlayerNetworkHandler(gameInstance); // Initialize handler
     if (!debugMode) {
         if (!SteamAPI_Init()) {
             std::cerr << "[NetworkManager] Steam API initialization failed!" << std::endl;
@@ -41,6 +42,7 @@ NetworkManager::NetworkManager(bool debugMode, CubeGame* gameInstance)
 }
 
 NetworkManager::~NetworkManager() {
+    delete playerHandler;
     SteamAPI_Shutdown();
 }
 
@@ -96,37 +98,23 @@ void NetworkManager::processCallbacks() {
 }
 
 void NetworkManager::receiveMessages() {
-    if (!m_networking || !SteamUser()) return;
-    
-    uint32 msgSize;
-    while (m_networking->IsP2PPacketAvailable(&msgSize)) {
-        char buffer[1024];
+    uint32 packetSize;
+    while (SteamNetworking()->IsP2PPacketAvailable(&packetSize)) {
+        std::vector<char> buffer(packetSize);
         CSteamID sender;
-        if (msgSize > sizeof(buffer) - 1) continue;
-        
-        if (m_networking->ReadP2PPacket(buffer, sizeof(buffer), &msgSize, &sender)) {
-            buffer[msgSize] = '\0';
-            std::string msg(buffer);
-            
-            if (m_connectedClients.find(sender) == m_connectedClients.end()) {
-                acceptSession(sender);
-                m_connectedClients[sender] = true;
+        uint32 bytesRead;
+
+        if (SteamNetworking()->ReadP2PPacket(buffer.data(), packetSize, &bytesRead, &sender)) {
+            std::string msg(buffer.data(), bytesRead);
+            // Handle batched messages
+            size_t pos = 0;
+            std::string delimiter = "|BATCH|";
+            while ((pos = msg.find(delimiter)) != std::string::npos) {
+                std::string singleMsg = msg.substr(0, pos);
+                ProcessNetworkMessages(singleMsg, sender);
+                msg.erase(0, pos + delimiter.length());
             }
-            
-            if (!game->m_isHost) {
-                const char* hostStr = SteamMatchmaking()->GetLobbyData(game->m_currentLobby, "host_steam_id");
-                if (hostStr && *hostStr && CSteamID(std::stoull(hostStr)) == sender) {
-                    isConnectedToHost = true;
-                }
-            }
-            
-            std::string msgType = msg.substr(0, msg.find('|'));
-            if (msgType.empty()) msgType = msg;
-            networkUsage[msgType].bytesReceived += msgSize;
-            networkUsage[msgType].messageCountReceived++;
-            if (messageHandler) {
-                messageHandler(msg, sender);
-            }
+            ProcessNetworkMessages(msg, sender); // Process last or only message
         }
     }
 }
@@ -163,128 +151,41 @@ void NetworkManager::setIsConnectedToHost(bool b) {
 void NetworkManager::ProcessNetworkMessages(const std::string& msg, CSteamID sender) {
     if (msg.empty()) return;
 
-    if (msg.find("PLAYER_LOADED") == 0) HandlePlayerLoaded(msg);
-    else if (msg[0] == 'P') HandlePlayerUpdate(msg);
-    else if (msg.find("E|SPAWN") == 0) HandleEnemySpawn(msg);
-    else if (msg.find("E|UPDATE") == 0) HandleEnemyUpdate(msg);
-    else if (msg.find("E|DEATH") == 0) HandleEnemyDeath(msg);
-    else if (msg.find("B|fire") == 0) HandleBulletFire(msg, sender);
-    else if (msg[0] == 'H') HandleHit(msg, sender);
-    else if (msg.find("E|REMOVE") == 0) HandleEnemyRemove(msg);
-    else if (msg.find("S|START") == 0) HandleStart(msg);
-    else if (msg.find("S|NEXT") == 0) HandleNextLevel(msg);
-    else if (msg.find("S|TIMER") == 0) HandleTimer(msg);
-    else if (msg.find("S|PLAY") == 0) HandlePlay(msg);
-    else if (msg.find("S|GAMEOVER") == 0) HandleGameOver(msg);
-    else if (msg.find("S|LOBBY") == 0) HandleLobbyReturn(msg);
-    else {
+    if (msg.find("PLAYER_LOADED") == 0) {
+        playerHandler->HandlePlayerUpdate(msg, sender); // Delegate
+    } else if (msg[0] == 'P') {
+        playerHandler->HandlePlayerUpdate(msg, sender); // Delegate
+    } else if (msg.find("E|SPAWN") == 0) {
+        HandleEnemySpawn(msg);
+    } else if (msg.find("E|UPDATE") == 0) {
+        HandleEnemyUpdate(msg);
+    } else if (msg.find("E|DEATH") == 0) {
+        HandleEnemyDeath(msg);
+    } else if (msg.find("B|fire") == 0) {
+        HandleBulletFire(msg, sender);
+    } else if (msg[0] == 'H') {
+        HandleHit(msg, sender);
+    } else if (msg.find("E|REMOVE") == 0) {
+        HandleEnemyRemove(msg);
+    } else if (msg.find("S|START") == 0) {
+        HandleStart(msg);
+    } else if (msg.find("S|NEXT") == 0) {
+        HandleNextLevel(msg);
+    } else if (msg.find("S|TIMER") == 0) {
+        HandleTimer(msg);
+    } else if (msg.find("S|PLAY") == 0) {
+        HandlePlay(msg);
+    } else if (msg.find("S|GAMEOVER") == 0) {
+        HandleGameOver(msg);
+    } else if (msg.find("S|LOBBY") == 0) {
+        HandleLobbyReturn(msg);
+    } else {
         std::cout << "[NetworkManager] Unhandled message: " << msg << std::endl;
     }
 }
 
-void NetworkManager::HandlePlayerLoaded(const std::string& msg) {
-    uint64_t steamID;
-    if (sscanf(msg.c_str(), "PLAYER_LOADED|%llu", &steamID) == 1) {
-        game->playerLoadedStatus[CSteamID(steamID)] = true;
-    }
-}
-void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
-    std::vector<std::string> parts;
-    std::stringstream ss(msg);
-    std::string part;
-    while (std::getline(ss, part, '|')) parts.push_back(part);
 
-    if (parts.empty() || parts[0] != "P") return;
 
-    bool isKeyValue = (parts.size() > 1 && parts[1] == "D");
-    size_t minParts = isKeyValue ? 3 : 12;
-    if (parts.size() < minParts) return;
-
-    size_t idIndex = isKeyValue ? 2 : 1;
-    CSteamID id(std::stoull(parts[idIndex]));
-
-    if (game->entityManager->getPlayers().count(id) == 0) {
-        Player newPlayer;
-        newPlayer.initialize();
-        newPlayer.steamID = id;
-        game->entityManager->getPlayers()[id] = newPlayer;
-    }
-    Player& p = game->entityManager->getPlayers()[id];
-
-    if (id == game->localSteamID) {
-        if (isKeyValue) {
-            size_t i = 3;
-            while (i + 1 < parts.size()) {
-                if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
-                else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
-                else if (parts[i] == "h") p.health = std::stoi(parts[i + 1]);
-                else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]) != 0;
-                else if (parts[i] == "k") p.kills = std::stoi(parts[i + 1]);
-                else if (parts[i] == "m") p.money = std::stoi(parts[i + 1]);
-                else if (parts[i] == "t") p.lastUpdateTimestamp = std::stoull(parts[i + 1]);
-                i += 2;
-            }
-            game->GetLocalPlayer() = p;
-        }
-    } else {
-        if (!isKeyValue) {
-            p.lastX = p.x;
-            p.lastY = p.y;
-            p.x = std::stof(parts[2]);
-            p.y = std::stof(parts[3]);
-            p.renderedX = std::stof(parts[4]);
-            p.renderedY = std::stof(parts[5]);
-            p.health = std::stoi(parts[6]);
-            p.kills = std::stoi(parts[7]);
-            p.ready = std::stoi(parts[8]) != 0;
-            p.money = std::stoi(parts[9]);
-            p.speed = std::stof(parts[10]);
-            p.isAlive = std::stoi(parts[11]) != 0;
-        } else {
-            float receivedAngle = p.orbitingCube.angle;
-            uint64_t receivedStartTimestamp = p.startTimestamp;
-            uint64_t receivedTimestamp = p.lastUpdateTimestamp;
-            size_t i = 3;
-            while (i + 1 < parts.size()) {
-                if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
-                else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
-                else if (parts[i] == "rx") p.renderedX = std::stof(parts[i + 1]);
-                else if (parts[i] == "ry") p.renderedY = std::stof(parts[i + 1]);
-                else if (parts[i] == "h") p.health = std::stoi(parts[i + 1]);
-                else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]) != 0;
-                else if (parts[i] == "k") p.kills = std::stoi(parts[i + 1]);
-                else if (parts[i] == "m") p.money = std::stoi(parts[i + 1]);
-                else if (parts[i] == "r") p.ready = std::stoi(parts[i + 1]) != 0;
-                else if (parts[i] == "s") p.speed = std::stof(parts[i + 1]);
-                else if (parts[i] == "oca") receivedAngle = std::stof(parts[i + 1]);
-                else if (parts[i] == "st") receivedStartTimestamp = std::stoull(parts[i + 1]);
-                else if (parts[i] == "t") receivedTimestamp = std::stoull(parts[i + 1]);
-                i += 2;
-            }
-
-            // Sync start timestamp if newer
-            if (receivedTimestamp > p.lastUpdateTimestamp) {
-                p.lastUpdateTimestamp = receivedTimestamp;
-                p.startTimestamp = receivedStartTimestamp;
-                p.orbitingCube.angle = receivedAngle;
-            }
-
-            // Calculate current angle based on total elapsed time since start
-            uint64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::system_clock::now().time_since_epoch()).count();
-            float elapsedTime = (now - p.startTimestamp) / 1000.0f;
-            p.orbitingCube.angle = p.orbitingCube.angularSpeed * elapsedTime;
-            p.orbitingCube.angle = std::fmod(p.orbitingCube.angle, 2 * M_PI);
-
-            p.orbitingCube.x = p.x + p.orbitingCube.radius * std::cos(p.orbitingCube.angle);
-            p.orbitingCube.y = p.y + p.orbitingCube.radius * std::sin(p.orbitingCube.angle);
-            p.lastX = p.x;
-            p.lastY = p.y;
-        }
-        p.shape.setPosition(p.renderedX, p.renderedY);
-        p.orbitingCube.shape.setPosition(p.orbitingCube.x, p.orbitingCube.y);
-    }
-}
 void NetworkManager::HandleEnemySpawn(const std::string& msg) {
     uint64_t enemyID, timestamp;
     float x, y, spawnDelay;
@@ -292,24 +193,19 @@ void NetworkManager::HandleEnemySpawn(const std::string& msg) {
     int parsed = sscanf(msg.c_str(), "E|SPAWN|%llu|%f|%f|%d|%f|%d|%llu",
                         &enemyID, &x, &y, &health, &spawnDelay, &type, &timestamp);
     if (parsed == 7) {
-        if (game->entityManager->getEnemies().count(enemyID) == 0 ||
-            (m_lastEnemyUpdateTime.count(enemyID) && m_lastEnemyUpdateTime[enemyID] < timestamp)) {
-            auto& newEnemy = game->entityManager->getEnemies().emplace(enemyID, Enemy()).first->second;
-            newEnemy.initialize(static_cast<Enemy::Type>(type));
-            newEnemy.id = enemyID;
-            newEnemy.x = x;
-            newEnemy.y = y;
-            newEnemy.health = health;
-            newEnemy.spawnDelay = spawnDelay;
-            newEnemy.renderedX = x;
-            newEnemy.renderedY = y;
-            newEnemy.lastX = x;
-            newEnemy.lastY = y;
+        if (!m_lastEnemyUpdateTime.count(enemyID) || m_lastEnemyUpdateTime[enemyID] < timestamp) {
+            EntityUpdate update;
+            update.type = EntityUpdate::Type::Spawn;
+            update.id = enemyID;
+            update.x = x;
+            update.y = y;
+            update.health = health;
+            update.spawnDelay = spawnDelay;
+            update.enemyType = static_cast<Enemy::Type>(type);
+            update.timestamp = timestamp;
+            game->entityManager->queueUpdate(update);
             m_lastEnemyUpdateTime[enemyID] = timestamp;
-            
         }
-    } else {
-        std::cout << "[DEBUG] Failed to parse enemy spawn: " << msg << "\n";
     }
 }
 
@@ -318,18 +214,17 @@ void NetworkManager::HandleEnemyUpdate(const std::string& msg) {
     float x, y, spawnDelay;
     int health;
     if (sscanf(msg.c_str(), "E|UPDATE|%llu|%f|%f|%d|%f|%llu", &enemyID, &x, &y, &health, &spawnDelay, &timestamp) == 6) {
-        if (game->entityManager->getEnemies().count(enemyID) > 0) {
-            if (!m_lastEnemyUpdateTime.count(enemyID) || m_lastEnemyUpdateTime[enemyID] < timestamp) {
-                Enemy& e = game->entityManager->getEnemies()[enemyID];
-                e.lastX = e.renderedX;
-                e.lastY = e.renderedY;
-                e.x = x;
-                e.y = y;
-                e.health = health;
-                e.spawnDelay = spawnDelay;
-                e.interpolationTime = INTERPOLATION_TIME;
-                m_lastEnemyUpdateTime[enemyID] = timestamp;
-            }
+        if (!m_lastEnemyUpdateTime.count(enemyID) || m_lastEnemyUpdateTime[enemyID] < timestamp) {
+            EntityUpdate update;
+            update.type = EntityUpdate::Type::Update;
+            update.id = enemyID;
+            update.x = x;
+            update.y = y;
+            update.health = health;
+            update.spawnDelay = spawnDelay;
+            update.timestamp = timestamp;
+            game->entityManager->queueUpdate(update);
+            m_lastEnemyUpdateTime[enemyID] = timestamp;
         }
     }
 }
@@ -377,10 +272,10 @@ void NetworkManager::HandleBulletFire(const std::string& msg, CSteamID sender) {
 void NetworkManager::HandleEnemyRemove(const std::string& msg) {
     uint64_t enemyID;
     if (sscanf(msg.c_str(), "E|REMOVE|%llu", &enemyID) == 1) {
-        if (game->entityManager->getEnemies().count(enemyID)) {
-            game->entityManager->getEnemies().erase(enemyID);
-    
-        }
+        EntityUpdate update;
+        update.type = EntityUpdate::Type::Remove;
+        update.id = enemyID;
+        game->entityManager->queueUpdate(update);
     }
 }
 void NetworkManager::HandleHit(const std::string& msg, CSteamID sender) {
@@ -506,41 +401,6 @@ void NetworkManager::ResetNetworkUsage() {
     networkUsage.clear();
 }
 
-void NetworkManager::SendPlayerUpdate() {
-    Player& p = game->entityManager->getPlayers()[game->localSteamID];
-    if (std::isnan(p.x) || std::isnan(p.y)) p.x = p.y = 0.0f;
-
-    uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-
-    std::ostringstream oss;
-    oss << "P|D|" << p.steamID.ConvertToUint64()
-        << "|x|" << p.x
-        << "|y|" << p.y
-        << "|h|" << p.health
-        << "|k|" << p.kills
-        << "|r|" << (p.ready ? 1 : 0)
-        << "|m|" << p.money
-        << "|s|" << p.speed
-        << "|a|" << (p.isAlive ? 1 : 0)
-        << "|oca|" << p.orbitingCube.angle  // Current angle
-        << "|st|" << p.startTimestamp       // Start timestamp for sync
-        << "|t|" << timestamp;              // Current timestamp for reference
-
-    std::string msg = oss.str();
-    if (game->m_isHost) {
-        broadcastMessage(msg);
-    } else {
-        const char* hostStr = SteamMatchmaking()->GetLobbyData(game->m_currentLobby, "host_steam_id");
-        if (hostStr && *hostStr) {
-            CSteamID hostID(std::stoull(hostStr));
-            sendMessage(hostID, msg);
-        }
-    }
-
-    p.lastUpdateTimestamp = timestamp;
-    game->entityManager->getPlayers()[game->localSteamID] = p;
-}
 
 void NetworkManager::SendGameplayMessage(const std::string& msg) {
     if (game->m_isHost) {
@@ -554,13 +414,7 @@ void NetworkManager::SendGameplayMessage(const std::string& msg) {
     }
 }
 
-void NetworkManager::ThrottledSendPlayerUpdate() {
-    const float playerUpdateRate = 0.1f; // Send updates every 0.1 seconds
-    if (m_playerUpdateClock.getElapsedTime().asSeconds() >= playerUpdateRate) {
-        SendPlayerUpdate(); // Send update regardless of movement
-        m_playerUpdateClock.restart();
-    }
-}
+
 
 void NetworkManager::SpawnEnemiesAndBroadcast() {
     if (!game->m_isHost) return;
@@ -925,5 +779,133 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
                 }
             }
         }
+    }
+}
+void NetworkManager::syncTimer(float timerValue) {
+    if (!game->m_isHost) return;
+    char buffer[64];
+    int bytes = snprintf(buffer, sizeof(buffer), "S|TIMER|%.1f", timerValue);
+    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
+        queueMessage(std::string(buffer), MessagePriority::Critical);
+    }
+}
+
+void NetworkManager::broadcastGameOver() {
+    if (!game->m_isHost) return;
+    char buffer[32];
+    int bytes = snprintf(buffer, sizeof(buffer), "S|GAMEOVER");
+    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
+        broadcastMessage(std::string(buffer));
+    }
+}
+
+void NetworkManager::syncLevelTransition(float duration) {
+    if (!game->m_isHost) return;
+    char buffer[64];
+    int bytes = snprintf(buffer, sizeof(buffer), "S|NEXT|%.1f", duration);
+    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
+        broadcastMessage(std::string(buffer));
+    }
+}
+
+void NetworkManager::syncEntities(EntityManager* em) {
+    if (!game->m_isHost) return;
+    uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+
+    for (auto it = em->getEnemies().begin(); it != em->getEnemies().end();) {
+        Enemy& enemy = it->second;
+        if (enemy.needsSync) {
+            if (enemy.health <= 0) {
+                char buffer[64];
+                int bytes = snprintf(buffer, sizeof(buffer), "E|REMOVE|%llu", enemy.id);
+                if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
+                    queueMessage(std::string(buffer), MessagePriority::Medium);
+                }
+                it = em->getEnemies().erase(it);
+            } else {
+                char buffer[128];
+                int bytes = snprintf(buffer, sizeof(buffer), "E|UPDATE|%llu|%.1f|%.1f|%d|%.2f|%llu",
+                                     enemy.id, enemy.x, enemy.y, enemy.health, enemy.spawnDelay, timestamp);
+                if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
+                    queueMessage(std::string(buffer), MessagePriority::Medium);
+                }
+                enemy.lastSentX = enemy.x;
+                enemy.lastSentY = enemy.y;
+                enemy.needsSync = false;
+                ++it;
+            }
+        } else {
+            ++it;
+        }
+    }
+}
+
+void NetworkManager::queueMessage(const std::string& content, MessagePriority priority, CSteamID target) {
+    uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    
+    float throttleDelay = 0.0f;
+    switch (priority) {
+        case MessagePriority::Critical: throttleDelay = 0.05f; break;
+        case MessagePriority::High: throttleDelay = 0.1f; break;
+        case MessagePriority::Medium: throttleDelay = 0.5f; break;
+        case MessagePriority::Low: throttleDelay = 1.0f; break;
+    }
+
+    NetworkMessage msg;
+    msg.content = content;
+    msg.priority = priority;
+    msg.target = target;
+    msg.timestamp = timestamp;
+    msg.sendAfter = throttleDelay;
+    messageQueue.push(msg);
+}
+
+void NetworkManager::processMessageQueue(float dt) {
+    timeSinceLastSend += dt;
+    const float minSendInterval = 0.05f; // Max 20 messages/sec
+    const int maxMessagesPerFrame = 5;
+    int messagesSent = 0;
+
+    std::vector<NetworkMessage> batch;
+    while (!messageQueue.empty() && messagesSent < maxMessagesPerFrame && timeSinceLastSend >= minSendInterval) {
+        NetworkMessage msg = messageQueue.top();
+        if (timeSinceLastSend < msg.sendAfter) break;
+
+        batch.push_back(msg);
+        messageQueue.pop();
+
+        // Batch messages with the same target or broadcast
+        while (!messageQueue.empty() && batch.size() < 10) { // Arbitrary batch limit
+            NetworkMessage nextMsg = messageQueue.top();
+            if (nextMsg.sendAfter > timeSinceLastSend || nextMsg.priority != msg.priority ||
+                (nextMsg.target != msg.target && nextMsg.target != k_steamIDNil)) break;
+            batch.push_back(nextMsg);
+            messageQueue.pop();
+        }
+
+        if (batch.size() > 1) {
+            std::string batchedMsg;
+            for (size_t i = 0; i < batch.size(); ++i) {
+                batchedMsg += batch[i].content;
+                if (i < batch.size() - 1) batchedMsg += "|BATCH|";
+            }
+            if (msg.target == k_steamIDNil) {
+                broadcastMessage(batchedMsg);
+            } else {
+                sendMessage(msg.target, batchedMsg);
+            }
+        } else {
+            if (msg.target == k_steamIDNil) {
+                broadcastMessage(msg.content);
+            } else {
+                sendMessage(msg.target, msg.content);
+            }
+        }
+
+        messagesSent++;
+        timeSinceLastSend = 0.0f;
+        batch.clear();
     }
 }

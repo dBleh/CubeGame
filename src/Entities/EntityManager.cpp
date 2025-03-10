@@ -40,7 +40,6 @@ Player& EntityManager::getLocalPlayer(CubeGame* game) {
 //-------------------------------------------------------------------------
 
 void EntityManager::updateEntities(float dt) {
-    // Update each bullet and remove it if its lifetime has expired.
     for (auto it = m_bullets.begin(); it != m_bullets.end();) {
         it->second.update(dt);
         if (it->second.lifetime <= 0) {
@@ -53,10 +52,7 @@ void EntityManager::updateEntities(float dt) {
         player.updateOrbitingCube(dt);
     }
 
-    // Refresh the collision grid for the current frame.
     updateCollisionGrid();
-
-    // Increment the enemy update timer.
     lastEnemyUpdateTime += dt;
     bool shouldSendUpdate = lastEnemyUpdateTime >= enemyUpdateInterval;
     std::vector<uint64_t> enemiesToRemove;
@@ -80,27 +76,25 @@ void EntityManager::updateEntities(float dt) {
 
                         enemy.update(dt);
 
-                        // Handle Splitter logic
                         if (enemy.type == Enemy::Splitter && enemy.splitTimer <= 0 && !enemy.isSplitting && enemy.splitCount < enemy.maxSplits) {
                             static uint64_t splitCounter = 0;
                             uint64_t newId = enemy.id + (splitCounter << 32) + 1;
                             splitCounter++;
 
-                            // Shrink the original enemy
-                            enemy.size *= 0.7f; // Reduce size by 70%
-                            enemy.health /= 2;  // Halve health
-                            enemy.splitCount++; // Increment split counter
-                            enemy.splitTimer = enemy.splitInterval; // Reset split timer
-                            enemy.isSplitting = false; // Reset splitting state
-                            enemy.shouldStopMoving = false; // Allow movement again
+                            enemy.size *= 0.7f;
+                            enemy.health /= 2;
+                            enemy.splitCount++;
+                            enemy.splitTimer = enemy.splitInterval;
+                            enemy.isSplitting = false;
+                            enemy.shouldStopMoving = false;
+                            enemy.needsSync = true; // Flag for sync
 
-                            // Create a new enemy as a "copy"
                             auto& newEnemy = m_enemies.emplace(newId, Enemy()).first->second;
                             newEnemy.initialize(Enemy::Splitter);
-                            newEnemy.health = enemy.health; // Same health as the shrunk original
-                            newEnemy.size = enemy.size;     // Same size as the shrunk original
+                            newEnemy.health = enemy.health;
+                            newEnemy.size = enemy.size;
                             newEnemy.color = enemy.color;
-                            newEnemy.x = enemy.renderedX + 20.f; // Offset slightly
+                            newEnemy.x = enemy.renderedX + 20.f;
                             newEnemy.y = enemy.renderedY + 20.f;
                             newEnemy.renderedX = newEnemy.x;
                             newEnemy.renderedY = newEnemy.y;
@@ -109,30 +103,12 @@ void EntityManager::updateEntities(float dt) {
                             newEnemy.lastSentX = newEnemy.x;
                             newEnemy.lastSentY = newEnemy.y;
                             newEnemy.interpolationTime = 0.f;
-                            newEnemy.spawnDelay = 0.1f; // Small delay for spawn effect
+                            newEnemy.spawnDelay = 0.1f;
+                            newEnemy.needsSync = true; // Flag new enemy
 
                             std::cout << "Splitter " << enemy.id << " split at (" << enemy.renderedX << ", " << enemy.renderedY << ")\n";
-                            std::cout << "NewEnemy ID " << newId << " spawned at (" << newEnemy.x << ", " << newEnemy.y << ")\n";
-
-                            // Network update for the new enemy
-                            uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                std::chrono::system_clock::now().time_since_epoch()).count();
-                                char buffer[128];
-                                int bytes = snprintf(buffer, sizeof(buffer), "E|SPAWN|%llu|%.1f|%.1f|%d|%.2f|%d|%llu",
-                                                    newId, newEnemy.x, newEnemy.y, newEnemy.health, newEnemy.spawnDelay,
-                                                    static_cast<int>(newEnemy.type), timestamp);
-                                if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer) && onEnemyUpdate)
-                                    onEnemyUpdate(std::string(buffer));
-                            
-                                char origBuffer[128];
-                                int origBytes = snprintf(origBuffer, sizeof(origBuffer), "E|UPDATE|%llu|%.1f|%.1f|%d|%.2f|%d|%llu",
-                                                         enemy.id, enemy.x, enemy.y, enemy.health, enemy.spawnDelay,
-                                                         static_cast<int>(enemy.type), timestamp); // Added type
-                                if (origBytes > 0 && static_cast<size_t>(origBytes) < sizeof(origBuffer) && onEnemyUpdate)
-                                    onEnemyUpdate(std::string(origBuffer));
                         }
 
-                        // Move enemy toward nearest player
                         float minDist = std::numeric_limits<float>::max();
                         sf::Vector2f targetPos(enemy.x, enemy.y);
                         bool foundAlivePlayer = false;
@@ -149,7 +125,6 @@ void EntityManager::updateEntities(float dt) {
                             }
                         }
 
-                        // Calculate separation force from nearby enemies
                         sf::Vector2f separationForce(0.f, 0.f);
                         int ex = int(enemy.renderedX / 100.f);
                         int ey = int(enemy.renderedY / 100.f);
@@ -159,7 +134,7 @@ void EntityManager::updateEntities(float dt) {
                                 if (collisionGrid.count(sepKey)) {
                                     const auto& nearbyIds = collisionGrid[sepKey].enemyIds;
                                     for (uint64_t otherId : nearbyIds) {
-                                        if (otherId == enemyId) continue; // Skip self
+                                        if (otherId == enemyId) continue;
                                         const Enemy& other = m_enemies[otherId];
                                         sf::Vector2f sep = enemy.calculateSeparation(other);
                                         separationForce.x += sep.x;
@@ -169,7 +144,6 @@ void EntityManager::updateEntities(float dt) {
                             }
                         }
 
-                        // Apply movement and separation
                         if (foundAlivePlayer) {
                             enemy.move(dt, targetPos.x, targetPos.y);
                         }
@@ -177,32 +151,13 @@ void EntityManager::updateEntities(float dt) {
                         enemy.x += separationForce.x * separationStrength * dt;
                         enemy.y += separationForce.y * separationStrength * dt;
 
-                        // Network synchronization
-                        float posDeltaX = enemy.x - enemy.lastSentX;
-                        float posDeltaY = enemy.y - enemy.lastSentY;
-                        bool positionChanged = std::abs(posDeltaX) > 10.0f || std::abs(posDeltaY) > 10.0f;
-                        if (shouldSendUpdate && positionChanged && onEnemyUpdate) {
-                            enemy.lastSentX = enemy.x;
-                            enemy.lastSentY = enemy.y;
-                            uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                std::chrono::system_clock::now().time_since_epoch()).count();
-                            char buffer[128];
-                            int bytes = snprintf(buffer, sizeof(buffer), "E|UPDATE|%llu|%.1f|%.1f|%d|%.2f|%llu",
-                                                 enemy.id, enemy.x, enemy.y, enemy.health, enemy.spawnDelay, timestamp);
-                            if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer))
-                                onEnemyUpdate(std::string(buffer));
+                        if (shouldSendUpdate && (std::abs(enemy.x - enemy.lastSentX) > 10.0f || std::abs(enemy.y - enemy.lastSentY) > 10.0f)) {
+                            enemy.needsSync = true; // Flag position change
                         }
                         ++it;
                     }
                 }
             }
-        }
-    }
-
-    // Process any remaining removals (though not needed for Splitters anymore)
-    for (const auto& id : enemiesToRemove) {
-        if (m_enemies.erase(id)) {
-            std::cout << "[DEBUG] Deferred removal of enemy " << id << "\n";
         }
     }
 
@@ -324,15 +279,12 @@ void EntityManager::checkCollisions(
     std::function<void(const Bullet&, uint64_t enemyId)> onBulletEnemyCollision,
     std::function<void(CSteamID playerId, uint64_t enemyId)> onEnemyPlayerCollision
 ) {
-    // Update the collision grid to reflect current positions.
     updateCollisionGrid();
-    
-    // Process bullet-enemy collisions.
+
     for (auto bulletIt = m_bullets.begin(); bulletIt != m_bullets.end();) {
         bool bulletHit = false;
         int bx = int(bulletIt->second.renderedX / 100.f);
         int by = int(bulletIt->second.renderedY / 100.f);
-        // Check neighboring grid cells.
         for (int dx = -1; dx <= 1; ++dx) {
             for (int dy = -1; dy <= 1; ++dy) {
                 int key = (bx + dx) * 1000 + (by + dy);
@@ -342,10 +294,9 @@ void EntityManager::checkCollisions(
                         Enemy& enemy = m_enemies[enemyId];
                         if (enemy.health > 0 && 
                             bulletIt->second.shape.getGlobalBounds().intersects(enemy.getBounds())) {
-                            // Notify of bullet-enemy collision.
                             onBulletEnemyCollision(bulletIt->second, enemyId);
                             bulletHit = true;
-                            break; // A bullet only hits one enemy.
+                            break;
                         }
                     }
                 }
@@ -359,6 +310,7 @@ void EntityManager::checkCollisions(
             ++bulletIt;
         }
     }
+
     for (auto& [playerId, player] : m_players) {
         if (!player.orbitingCube.active || !player.isAlive) continue;
 
@@ -373,51 +325,15 @@ void EntityManager::checkCollisions(
                         Enemy& enemy = m_enemies[*it];
                         if (enemy.health > 0 && 
                             player.getOrbitingCubeBounds().intersects(enemy.getBounds())) {
-                            enemy.health -= 10; // Deal 10 damage (consistent with bullet)
+                            enemy.health -= 10;
+                            enemy.needsSync = true; // Flag for sync
 
                             if (enemy.health <= 0) {
-                                // Increment player's kills and money
                                 player.kills += 1;
                                 player.money += 10;
-
-                                // Network update for enemy removal and player stats
-                                if (onEnemyUpdate) {
-                                    // Broadcast enemy removal
-                                    char removeBuffer[64];
-                                    int bytes = snprintf(removeBuffer, sizeof(removeBuffer), 
-                                                         "E|REMOVE|%llu", *it);
-                                    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(removeBuffer)) {
-                                        onEnemyUpdate(std::string(removeBuffer));
-                                    }
-
-                                    // Broadcast player update (kills and money)
-                                    char playerBuffer[128];
-                                    bytes = snprintf(playerBuffer, sizeof(playerBuffer), 
-                                                     "P|D|%llu|k|%d|m|%d",
-                                                     player.steamID.ConvertToUint64(), 
-                                                     player.kills, player.money);
-                                    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(playerBuffer)) {
-                                        onEnemyUpdate(std::string(playerBuffer));
-                                    }
-                                }
-
-                                // Remove enemy
                                 m_enemies.erase(*it);
                                 it = enemyIds.erase(it);
                             } else {
-                                // Optional: Broadcast enemy health update if desired
-                                if (onEnemyUpdate) {
-                                    uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                        std::chrono::system_clock::now().time_since_epoch()).count();
-                                    char updateBuffer[128];
-                                    int bytes = snprintf(updateBuffer, sizeof(updateBuffer), 
-                                                         "E|UPDATE|%llu|%.1f|%.1f|%d|%.2f|%llu",
-                                                         enemy.id, enemy.x, enemy.y, enemy.health, 
-                                                         enemy.spawnDelay, timestamp);
-                                    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(updateBuffer)) {
-                                        onEnemyUpdate(std::string(updateBuffer));
-                                    }
-                                }
                                 ++it;
                             }
                         } else {
@@ -429,7 +345,6 @@ void EntityManager::checkCollisions(
         }
     }
 
-    // Process player-enemy collisions.
     for (auto playerIt = m_players.begin(); playerIt != m_players.end(); ++playerIt) {
         int px = int(playerIt->second.renderedX / 100.f);
         int py = int(playerIt->second.renderedY / 100.f);
@@ -438,14 +353,13 @@ void EntityManager::checkCollisions(
                 int key = (px + dx) * 1000 + (py + dy);
                 if (collisionGrid.count(key)) {
                     auto& enemyIds = collisionGrid[key].enemyIds;
-                    // Iterate over enemy IDs in the cell.
                     for (auto it = enemyIds.begin(); it != enemyIds.end();) {
                         Enemy& enemy = m_enemies[*it];
                         if (playerIt->second.shape.getGlobalBounds().intersects(enemy.getBounds())) {
-                            // Notify of enemy-player collision.
                             onEnemyPlayerCollision(playerIt->first, *it);
-                            it = enemyIds.erase(it); // Remove enemy from grid cell.
-                            m_enemies.erase(*it);    // Also remove from main enemy container.
+                            enemy.needsSync = true; // Flag for sync
+                            m_enemies.erase(*it);
+                            it = enemyIds.erase(it);
                         } else {
                             ++it;
                         }
@@ -469,4 +383,48 @@ void EntityManager::setEnemyUpdateCallback(std::function<void(const std::string&
 bool EntityManager::areEntitiesInitialized() const {
     // Simple check: there should be at least one player.
     return !m_players.empty();
+}
+
+
+void EntityManager::queueUpdate(const EntityUpdate& update) {
+    updateQueue.push(update);
+}
+
+void EntityManager::applyQueuedUpdates() {
+    while (!updateQueue.empty()) {
+        const EntityUpdate& update = updateQueue.front();
+        switch (update.type) {
+            case EntityUpdate::Type::Spawn:
+                if (m_enemies.count(update.id) == 0) {
+                    auto& newEnemy = m_enemies.emplace(update.id, Enemy()).first->second;
+                    newEnemy.initialize(update.enemyType);
+                    newEnemy.id = update.id;
+                    newEnemy.x = update.x;
+                    newEnemy.y = update.y;
+                    newEnemy.health = update.health;
+                    newEnemy.spawnDelay = update.spawnDelay;
+                    newEnemy.renderedX = update.x;
+                    newEnemy.renderedY = update.y;
+                    newEnemy.lastX = update.x;
+                    newEnemy.lastY = update.y;
+                }
+                break;
+            case EntityUpdate::Type::Update:
+                if (m_enemies.count(update.id) > 0) {
+                    Enemy& e = m_enemies[update.id];
+                    e.lastX = e.renderedX;
+                    e.lastY = e.renderedY;
+                    e.x = update.x;
+                    e.y = update.y;
+                    e.health = update.health;
+                    e.spawnDelay = update.spawnDelay;
+                    e.interpolationTime = INTERPOLATION_TIME;
+                }
+                break;
+            case EntityUpdate::Type::Remove:
+                m_enemies.erase(update.id);
+                break;
+        }
+        updateQueue.pop();
+    }
 }

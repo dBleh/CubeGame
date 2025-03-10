@@ -35,7 +35,7 @@ GameplayState::GameplayState(CubeGame* game)
 void GameplayState::Update(float dt) {
     // Logic updates with fixed dt (e.g., 1/60s)
     if (game->IsHost()) {
-        game->GetNetworkManager()->receiveMessages();
+        // Removed: game->GetNetworkManager()->receiveMessages();
         CheckAndAdvanceLevel();
 
         if (nextLevelTimer > 0) {
@@ -43,11 +43,8 @@ void GameplayState::Update(float dt) {
             static float lastTimerSync = 0.0f;
             lastTimerSync += dt;
             if (lastTimerSync >= 0.5f) {
-                char buffer[64];
-                int bytes = snprintf(buffer, sizeof(buffer), "S|TIMER|%.1f", nextLevelTimer);
-                if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
-                    game->GetNetworkManager()->SendGameplayMessage(std::string(buffer));
-                }
+                // Replace direct send with a NetworkManager method
+                game->GetNetworkManager()->syncTimer(nextLevelTimer);
                 lastTimerSync = 0.0f;
             }
             if (nextLevelTimer <= 0) {
@@ -64,21 +61,15 @@ void GameplayState::Update(float dt) {
             [](const auto& pair) { return !pair.second.isAlive; });
         if (allDead && game->GetCurrentState() != GameState::GameOver) {
             game->SetCurrentState(GameState::GameOver);
-            char gameOverBuffer[32];
-            int goBytes = snprintf(gameOverBuffer, sizeof(gameOverBuffer), "S|GAMEOVER");
-            if (goBytes > 0 && static_cast<size_t>(goBytes) < sizeof(gameOverBuffer)) {
-                game->GetNetworkManager()->broadcastMessage(std::string(gameOverBuffer));
-            }
+            game->GetNetworkManager()->broadcastGameOver(); // New method
             return;
         }
     }
 
-    // Update playing state logic
     if (game->GetCurrentState() == GameState::Playing && !menuVisible) {
         UpdatePlayingState(dt);
     }
 
-    // Update HUD content (logic, not rendering)
     sf::Vector2u winSize = game->GetWindow().getSize();
     game->GetHUD().refreshHUDContent(game->GetCurrentState(), menuVisible, shopOpen, winSize, game->GetLocalPlayer());
     game->GetHUD().refreshGameInfo(winSize, game->GetCurrentLevel(), game->GetEnemies().size(),
@@ -123,12 +114,12 @@ void GameplayState::UpdatePlayingState(float dt) {
     Player& localPlayer = game->GetLocalPlayer();
     if (localPlayer.isAlive) {
         bool playerMoved = localPlayer.move(dt);
-        localPlayer.updateOrbitingCube(dt); // Use real dt
+        localPlayer.updateOrbitingCube(dt);
         if (playerMoved) {
             localPlayer.renderedX = localPlayer.x;
             localPlayer.renderedY = localPlayer.y;
             localPlayer.shape.setPosition(localPlayer.renderedX, localPlayer.renderedY);
-            game->GetNetworkManager()->ThrottledSendPlayerUpdate();
+            game->GetNetworkManager()->ThrottledSendPlayerUpdate(dt);
         }
         if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
             Player& updatedLocalPlayer = game->GetLocalPlayer();
@@ -264,10 +255,10 @@ void GameplayState::NextLevel() {
     game->GetEnemiesPerWave() += 2;
     StartNextLevelTimer(5.0f);
     if (game->IsHost()) {
+        game->GetNetworkManager()->syncLevelTransition(5.0f); // Use new method
         game->GetNetworkManager()->SyncEnemiesFull();
     }
 }
-
 void GameplayState::HandleStorePurchase() {
     sf::Vector2i mousePos = sf::Mouse::getPosition(game->GetWindow());
     sf::Vector2f viewPos = game->GetWindow().mapPixelToCoords(mousePos, game->GetView());
@@ -277,7 +268,7 @@ void GameplayState::HandleStorePurchase() {
         localPlayer.money -= 50;
         localPlayer.speed += 50.f;
         game->GetPlayers()[localPlayer.steamID] = localPlayer;
-        game->GetNetworkManager()->ThrottledSendPlayerUpdate();
+
     }
 }
 

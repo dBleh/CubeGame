@@ -3,7 +3,7 @@
 
 #include <SFML/Graphics.hpp>
 #include "../Utils/Config.h"
-
+const float INTERPOLATION_TIME = 0.1f;
 /**
  * @brief Represents an enemy entity in the game.
  *
@@ -28,6 +28,7 @@ struct Enemy {
     int health;                  // Health value of the enemy
     uint64_t id;                 // Unique identifier
     float spawnDelay;            // Delay before the enemy becomes active
+    bool needsSync = false;
 
     // --- Splitting/Shake Mechanics ---
     float splitTimer = 0.f;      // Timer for when to split or trigger shake effect
