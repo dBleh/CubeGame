@@ -129,7 +129,9 @@ void GameplayState::UpdatePlayingState(float dt) {
         }
     }
 
-    game->GetNetworkManager()->HandleCollisionsAndSync(dt, game);
+    if (game->IsHost()) {
+        game->GetNetworkManager()->HandleCollisionsAndSync(dt, game);
+    }
 }
 
 //---------------------------------------------------------
