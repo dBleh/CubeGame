@@ -7,7 +7,7 @@
 #include <iostream>          // For std::cout
 
 // Define the static constant
-const float PlayerNetworkHandler::PLAYER_UPDATE_INTERVAL = 0.1f; // 10 updates/sec
+const float PlayerNetworkHandler::PLAYER_UPDATE_INTERVAL = 0.033f; // 10 updates/sec
 
 // Constructor
 PlayerNetworkHandler::PlayerNetworkHandler(CubeGame* game) : game(game) {}
