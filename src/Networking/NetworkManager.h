@@ -51,7 +51,7 @@ public:
     
     void ReportNetworkUsage() const;
     void ResetNetworkUsage();
-    
+    static std::vector<std::string> split(const std::string& s, char delimiter);
     // Network/game functions
     void ProcessNetworkMessages(const std::string& msg, CSteamID sender);
     void SendGameplayMessage(const std::string& msg);
@@ -68,6 +68,7 @@ public:
     void broadcastGameOver();                   // Signal game over
     void syncLevelTransition(float duration);
     void syncEntities(EntityManager* em); // Sync flagged entities
+    void HandlePlayerSpawn(const std::string& msg);
 private:
     std::map<CSteamID, uint64_t> m_lastPlayerUpdateTime;
     struct NetworkStats {
