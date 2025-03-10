@@ -174,147 +174,42 @@ void NetworkManager::HandlePlayerLoaded(const std::string& msg) {
         game->playerLoadedStatus[CSteamID(steamID)] = true;
     }
 }
-void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
-    std::vector<std::string> parts;
-    std::stringstream ss(msg);
-    std::string part;
-    while (std::getline(ss, part, '|')) parts.push_back(part);
-
-    if (parts.empty() || parts[0] != "P") return;
-
-    bool isKeyValue = (parts.size() > 1 && parts[1] == "D");
-    size_t minParts = isKeyValue ? 3 : 12;
-    if (parts.size() < minParts) return;
-
-    size_t idIndex = isKeyValue ? 2 : 1;
-    CSteamID id(std::stoull(parts[idIndex]));
-
-    if (game->entityManager->getPlayers().count(id) == 0) {
-        Player newPlayer;
-        newPlayer.initialize();
-        newPlayer.steamID = id;
-        game->entityManager->getPlayers()[id] = newPlayer;
-    }
-    Player& p = game->entityManager->getPlayers()[id];
-    if (id != game->localSteamID) {
-        if (isKeyValue) {
-            float oldX = p.x, oldY = p.y;
-            size_t i = 3;
-            while (i + 1 < parts.size()) {
-                if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
-                else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
-                else if (parts[i] == "h") p.health = std::stoi(parts[i + 1]);
-                else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]) != 0;
-                else if (parts[i] == "k") p.kills = std::stoi(parts[i + 1]);
-                else if (parts[i] == "m") p.money = std::stoi(parts[i + 1]);
-                else if (parts[i] == "s") p.speed = std::stof(parts[i + 1]);
-                i += 2;
+void NetworkManager::HandleEnemyUpdate(const std::string& msg) {
+    uint64_t enemyID, timestamp;
+    float x, y, spawnDelay;
+    int health;
+    if (sscanf(msg.c_str(), "E|UPDATE|%llu|%f|%f|%d|%f|%llu", &enemyID, &x, &y, &health, &spawnDelay, ×tamp) == 6) {
+        if (!m_lastEnemyUpdateTime.count(enemyID) || m_lastEnemyUpdateTime[enemyID] < timestamp) {
+            auto& enemies = game->entityManager->getEnemies();
+            if (enemies.count(enemyID)) {
+                Enemy& e = enemies[enemyID];
+                e.lastX = e.renderedX;
+                e.lastY = e.renderedY;
+                e.x = x;
+                e.y = y;
+                e.health = health;
+                e.spawnDelay = spawnDelay;
+                e.interpolationTime = INTERPOLATION_TIME;
+                m_lastEnemyUpdateTime[enemyID] = timestamp;
+                std::cout << "Client updated enemy " << enemyID << " to (" << x << ", " << y << ")" << std::endl;
             }
-            float dt = Player::INTERPOLATION_DURATION; // Assume update interval
-            p.velocityX = (p.x - oldX) / dt;
-            p.velocityY = (p.y - oldY) / dt;
-            p.lastX = p.renderedX;
-            p.lastY = p.renderedY;
-            p.interpolationTime = Player::INTERPOLATION_DURATION;
         }
-        // Update orbiting cube position based on current angle
-        p.orbitingCube.x = p.x + p.orbitingCube.radius * std::cos(p.orbitingCube.angle);
-        p.orbitingCube.y = p.y + p.orbitingCube.radius * std::sin(p.orbitingCube.angle);
-    }
-    if (id == game->localSteamID) {
-        if (isKeyValue) {
-            size_t i = 3;
-            while (i + 1 < parts.size()) {
-                if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
-                else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
-                else if (parts[i] == "h") p.health = std::stoi(parts[i + 1]);
-                else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]) != 0;
-                else if (parts[i] == "k") p.kills = std::stoi(parts[i + 1]);
-                else if (parts[i] == "m") p.money = std::stoi(parts[i + 1]);
-                else if (parts[i] == "t") p.lastUpdateTimestamp = std::stoull(parts[i + 1]);
-                i += 2;
-            }
-            game->GetLocalPlayer() = p;
-        }
-    } else {
-        if (!isKeyValue) {
-            p.lastX = p.x;
-            p.lastY = p.y;
-            p.x = std::stof(parts[2]);
-            p.y = std::stof(parts[3]);
-            p.renderedX = std::stof(parts[4]);
-            p.renderedY = std::stof(parts[5]);
-            p.health = std::stoi(parts[6]);
-            p.kills = std::stoi(parts[7]);
-            p.ready = std::stoi(parts[8]) != 0;
-            p.money = std::stoi(parts[9]);
-            p.speed = std::stof(parts[10]);
-            p.isAlive = std::stoi(parts[11]) != 0;
-        } else {
-            float receivedAngle = p.orbitingCube.angle;
-            uint64_t receivedStartTimestamp = p.startTimestamp;
-            uint64_t receivedTimestamp = p.lastUpdateTimestamp;
-            size_t i = 3;
-            while (i + 1 < parts.size()) {
-                if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
-                else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
-                else if (parts[i] == "rx") p.renderedX = std::stof(parts[i + 1]);
-                else if (parts[i] == "ry") p.renderedY = std::stof(parts[i + 1]);
-                else if (parts[i] == "h") p.health = std::stoi(parts[i + 1]);
-                else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]) != 0;
-                else if (parts[i] == "k") p.kills = std::stoi(parts[i + 1]);
-                else if (parts[i] == "m") p.money = std::stoi(parts[i + 1]);
-                else if (parts[i] == "r") p.ready = std::stoi(parts[i + 1]) != 0;
-                else if (parts[i] == "s") p.speed = std::stof(parts[i + 1]);
-                else if (parts[i] == "oca") receivedAngle = std::stof(parts[i + 1]);
-                else if (parts[i] == "st") receivedStartTimestamp = std::stoull(parts[i + 1]);
-                else if (parts[i] == "t") receivedTimestamp = std::stoull(parts[i + 1]);
-                i += 2;
-            }
-
-            // Sync start timestamp if newer
-            if (receivedTimestamp > p.lastUpdateTimestamp) {
-                p.lastUpdateTimestamp = receivedTimestamp;
-                p.startTimestamp = receivedStartTimestamp;
-                p.orbitingCube.angle = receivedAngle;
-            }
-
-            // Calculate current angle based on total elapsed time since start
-            uint64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::system_clock::now().time_since_epoch()).count();
-            float elapsedTime = (now - p.startTimestamp) / 1000.0f;
-            p.orbitingCube.angle = p.orbitingCube.angularSpeed * elapsedTime;
-            p.orbitingCube.angle = std::fmod(p.orbitingCube.angle, 2 * M_PI);
-
-            p.orbitingCube.x = p.x + p.orbitingCube.radius * std::cos(p.orbitingCube.angle);
-            p.orbitingCube.y = p.y + p.orbitingCube.radius * std::sin(p.orbitingCube.angle);
-            p.lastX = p.x;
-            p.lastY = p.y;
-        }
-        p.shape.setPosition(p.renderedX, p.renderedY);
-        p.orbitingCube.shape.setPosition(p.orbitingCube.x, p.orbitingCube.y);
     }
 }
 void NetworkManager::HandleEnemySpawn(const std::string& msg) {
     uint64_t enemyID, timestamp;
     float x, y, spawnDelay;
-    int health, type;
-    int parsed = sscanf(msg.c_str(), "E|SPAWN|%llu|%f|%f|%d|%f|%d|%llu",
-                        &enemyID, &x, &y, &health, &spawnDelay, &type, &timestamp);
-    if (parsed == 7) {
-        if (!m_lastEnemyUpdateTime.count(enemyID) || m_lastEnemyUpdateTime[enemyID] < timestamp) {
-            EntityUpdate update;
-            update.type = EntityUpdate::Type::Spawn;
-            update.id = enemyID;
-            update.x = x;
-            update.y = y;
-            update.health = health;
-            update.spawnDelay = spawnDelay;
-            update.enemyType = static_cast<Enemy::Type>(type);
-            update.timestamp = timestamp;
-            game->entityManager->queueUpdate(update);
-            m_lastEnemyUpdateTime[enemyID] = timestamp;
-        }
+    int health;
+    if (sscanf(msg.c_str(), "E|SPAWN|%llu|%f|%f|%d|%f|%llu", &enemyID, &x, &y, &health, &spawnDelay, ×tamp) == 6) {
+        Enemy& e = game->entityManager->getEnemies()[enemyID];
+        e.id = enemyID;
+        e.x = e.renderedX = e.lastX = x;
+        e.y = e.renderedY = e.lastY = y;
+        e.health = health;
+        e.spawnDelay = spawnDelay;
+        e.shape.setPosition(x, y);
+        m_lastEnemyUpdateTime[enemyID] = timestamp;
+        std::cout << "Client spawned enemy " << enemyID << " at (" << x << ", " << y << ")" << std::endl;
     }
 }
 
@@ -353,10 +248,15 @@ void NetworkManager::HandleEnemyRemove(const std::string& msg) {
 void NetworkManager::HandleEnemyDeath(const std::string& msg) {
     uint64_t enemyID, deathSequence, killerID;
     if (sscanf(msg.c_str(), "E|DEATH|%llu|%llu|%llu", &enemyID, &deathSequence, &killerID) == 3) {
-        if (!m_lastEnemyUpdateTime.count(enemyID) || m_lastEnemyUpdateTime[enemyID] < deathSequence) {
-            game->entityManager->getEnemies().erase(enemyID);
-            m_lastEnemyUpdateTime[enemyID] = deathSequence; // Use sequence as timestamp
+        std::cout << "Client processing E|DEATH| for enemy " << enemyID << std::endl;
+        auto& enemies = game->entityManager->getEnemies();
+        if (enemies.count(enemyID)) {
+            enemies.erase(enemyID);
+            std::cout << "Client removed enemy " << enemyID << std::endl;
         }
+        m_lastEnemyUpdateTime[enemyID] = deathSequence;
+    } else {
+        std::cerr << "Client failed to parse E|DEATH|: " << msg << std::endl;
     }
 }
 
@@ -598,26 +498,27 @@ void NetworkManager::SpawnEnemiesAndBroadcast() {
 }
 void NetworkManager::SyncEnemies() {
     if (!game->m_isHost) return;
-    
+
     uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
-    
-    for (auto it = game->entityManager->getEnemies().begin(); it != game->entityManager->getEnemies().end();) {
+
+    auto& enemies = game->entityManager->getEnemies();
+    for (auto it = enemies.begin(); it != enemies.end();) {
         Enemy& enemy = it->second;
         if (enemy.health <= 0) {
-            char buffer[64];
-            int bytes = snprintf(buffer, sizeof(buffer), "E|REMOVE|%llu", enemy.id);
+            char buffer[128];
+            int bytes = snprintf(buffer, sizeof(buffer), "E|DEATH|%llu|%llu|%llu",
+                                 enemy.id, enemy.deathSequence, 0ULL);
             if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                 broadcastMessage(std::string(buffer));
             }
-            it = game->entityManager->getEnemies().erase(it);
+            it = enemies.erase(it);
         } else {
             char buffer[128];
             int bytes = snprintf(buffer, sizeof(buffer), "E|UPDATE|%llu|%.1f|%.1f|%d|%.2f|%llu",
-                                enemy.id, enemy.x, enemy.y, enemy.health, enemy.spawnDelay, timestamp);
+                                 enemy.id, enemy.x, enemy.y, enemy.health, enemy.spawnDelay, timestamp);
             if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                 broadcastMessage(std::string(buffer));
-                m_lastEnemyUpdateTime[enemy.id] = timestamp;
             }
             ++it;
         }

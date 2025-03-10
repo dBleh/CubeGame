@@ -291,7 +291,7 @@ void EntityManager::checkCollisions(
     updateCollisionGrid();
 
     static uint64_t deathSequence = 0; // Unique sequence number for deaths
-
+    if (!game->IsHost()) return;
     // Bullet collisions
     for (auto bulletIt = m_bullets.begin(); bulletIt != m_bullets.end();) {
         bool bulletHit = false;
@@ -310,8 +310,7 @@ void EntityManager::checkCollisions(
                             bulletHit = true;
                             if (enemy.health <= 0) {
                                 deathSequence++;
-                                enemy.needsSync = true; // Flag for sync
-                                enemy.deathSequence = deathSequence; // Store sequence
+                                enemy.deathSequence = deathSequence;
                             }
                             break;
                         }
