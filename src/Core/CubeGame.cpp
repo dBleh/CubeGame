@@ -87,7 +87,10 @@ CubeGame::CubeGame() : hud(font) {
     window.setFramerateLimit(60);
 
     if (!font.loadFromFile("Roboto-Regular.ttf")) {
+        if(!font.loadFromFile("../../Roboto-Regular.ttf")){
         std::cerr << "[ERROR] Failed to load font!" << std::endl;
+        }
+
     }
 
     if (!debugMode && SteamUser() && SteamUser()->BLoggedOn()) {
