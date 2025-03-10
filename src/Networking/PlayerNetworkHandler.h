@@ -22,7 +22,7 @@ public:
 private:
     CubeGame* game;                   // Pointer to game instance for accessing players and NetworkManager
     float lastPlayerUpdateTime = 0.0f; // Timer for throttling
-    const float PlayerNetworkHandler::PLAYER_UPDATE_INTERVAL = 0.016f;
+    static const float PLAYER_UPDATE_INTERVAL; // Throttling interval (e.g., 0.1s)
 };
 
 #endif // PLAYER_NETWORK_HANDLER_H

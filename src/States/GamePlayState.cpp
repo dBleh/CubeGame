@@ -120,8 +120,8 @@ void GameplayState::UpdatePlayingState(float dt) {
             localPlayer.renderedX = localPlayer.x;
             localPlayer.renderedY = localPlayer.y;
             localPlayer.shape.setPosition(localPlayer.renderedX, localPlayer.renderedY);
+            game->GetNetworkManager()->ThrottledSendPlayerUpdate();
         }
-        game->GetNetworkManager()->ThrottledSendPlayerUpdate(); // Call every frame
         if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
             Player& updatedLocalPlayer = game->GetLocalPlayer();
             if (updatedLocalPlayer.isAlive) {
@@ -192,6 +192,7 @@ void GameplayState::RenderPlayers() {
         }
     }
 }
+
 void GameplayState::RenderEnemies() {
     updateEnemyVertices();
     game->GetWindow().draw(enemyVertices);
