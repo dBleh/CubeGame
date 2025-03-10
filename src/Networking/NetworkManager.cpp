@@ -266,27 +266,59 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
         p.orbitingCube.shape.setPosition(p.orbitingCube.x, p.orbitingCube.y);
     }
 }
-void NetworkManager::ProcessNetworkMessages(const std::string& msg, CSteamID sender) {
-    if (msg.empty()) return;
+void NetworkManager::receiveMessages() {
+    uint32 packetSize;
+    CSteamID sender;
+    while (SteamNetworking()->IsP2PPacketAvailable(&packetSize)) {
+        std::vector<char> buffer(packetSize);
+        uint32 bytesRead;
+        if (SteamNetworking()->ReadP2PPacket(buffer.data(), packetSize, &bytesRead, &sender)) {
+            if (bytesRead > 0) {
+                buffer[bytesRead - 1] = '\0'; // Null-terminate
+                std::string msg(buffer.data());
+                m_bytesReceived += bytesRead;
 
-    if (msg.find("PLAYER_LOADED") == 0) HandlePlayerLoaded(msg);
-    else if (msg.find("E|SPAWN") == 0) HandleEnemySpawn(msg);
-    else if (msg.find("E|UPDATE") == 0) HandleEnemyUpdate(msg);
-    else if (msg.find("E|DEATH") == 0) HandleEnemyDeath(msg);
-    else if (msg.find("B|fire") == 0) HandleBulletFire(msg, sender);
-    else if (msg[0] == 'H') HandleHit(msg, sender);
-    else if (msg.find("E|REMOVE") == 0) HandleEnemyRemove(msg);
-    else if (msg.find("S|START") == 0) HandleStart(msg);
-    else if (msg.find("S|NEXT") == 0) HandleNextLevel(msg);
-    else if (msg.find("S|TIMER") == 0) HandleTimer(msg);
-    else if (msg.find("S|PLAY") == 0) HandlePlay(msg);
-    else if (msg.find("S|GAMEOVER") == 0) HandleGameOver(msg);
-    else if (msg.find("S|LOBBY") == 0) HandleLobbyReturn(msg);
-    else {
-        std::cout << "[NetworkManager] Unhandled message: " << msg << std::endl;
+                std::cout << "[NetworkManager] Received from " << sender.ConvertToUint64() << ": " << msg << std::endl;
+
+                // Handle player spawn/initial state (P|<steamID>|...)
+                if (msg.find("P|") == 0 && msg.find("P|D|") != 0) {
+                    HandlePlayerSpawn(msg);
+                }
+                // Handle player data update (P|D|<steamID>|key|value|...)
+                else if (msg.find("P|D|") == 0) {
+                    HandlePlayerUpdate(msg);
+                }
+                // Handle enemy spawn
+                else if (msg.find("E|SPAWN|") == 0) {
+                    HandleEnemySpawn(msg);
+                }
+                // Handle enemy update
+                else if (msg.find("E|UPDATE|") == 0) {
+                    HandleEnemyUpdate(msg);
+                }
+                // Handle enemy death
+                else if (msg.find("E|DEATH|") == 0) {
+                    HandleEnemyDeath(msg);
+                }
+                // Handle enemy remove (if still used)
+                else if (msg.find("E|REMOVE|") == 0) {
+                    HandleEnemyRemove(msg);
+                }
+                // Handle hit
+                else if (msg.find("H|") == 0) {
+                    HandleHit(msg);
+                }
+                // Handle bullet
+                else if (msg.find("B|") == 0) {
+                    HandleBullet(msg);
+                }
+                else {
+                    std::cerr << "[NetworkManager] Unhandled message: " << msg << std::endl;
+                }
+            }
+        }
     }
 }
-
 void NetworkManager::HandlePlayerLoaded(const std::string& msg) {
     uint64_t steamID;
     if (sscanf(msg.c_str(), "PLAYER_LOADED|%llu", &steamID) == 1) {
