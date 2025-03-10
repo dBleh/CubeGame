@@ -48,11 +48,10 @@ struct Player {
     float renderedX, renderedY;   ///< Interpolated position for rendering.
     float lastX, lastY;           ///< Previous position for interpolation.
     float targetX, targetY;       ///< Target position for interpolation.
-    float interpolationTime;      ///< Elapsed time used for interpolation.
+    float interpolationTime = 0.0f; 
     float velocityX = 0.0f;  // Velocity in X direction
     float velocityY = 0.0f;
-    static const float INTERPOLATION_TIME; // Define interpolation duration
-    //-------------------------------------------------------------------------
+    static const float INTERPOLATION_DURATION = 0.1f;    //-------------------------------------------------------------------------
     // Gameplay Properties
     //-------------------------------------------------------------------------
     int health = PLAYER_HEALTH;   ///< Player health.

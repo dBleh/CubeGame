@@ -227,15 +227,24 @@ void EntityManager::interpolateEntities(float alpha, CubeGame* game) {
 
     for (auto& [id, player] : m_players) {
         if (id == game->GetLocalPlayer().steamID) {
-            // Local player: Use current position from updateOrbitingCube
             player.renderedX = player.x;
             player.renderedY = player.y;
             player.orbitingCube.renderedX = player.orbitingCube.x;
             player.orbitingCube.renderedY = player.orbitingCube.y;
         } else {
-            // Remote players: Interpolate player position only, cube follows angle
-            player.renderedX = player.lastX + (player.x - player.lastX) * alpha;
-            player.renderedY = player.lastY + (player.y - player.lastY) * alpha;
+            if (player.interpolationTime > 0) {
+                player.interpolationTime -= fixedDt;
+                if (player.interpolationTime < 0) player.interpolationTime = 0;
+                float t = 1.0f - (player.interpolationTime / Player::INTERPOLATION_DURATION);
+                player.renderedX = player.lastX + (player.x - player.lastX) * t;
+                player.renderedY = player.lastY + (player.y - player.lastY) * t;
+            } else {
+                // Predict movement when interpolation ends
+                player.renderedX += player.velocityX * fixedDt;
+                player.renderedY += player.velocityY * fixedDt;
+                player.x = player.renderedX;
+                player.y = player.renderedY;
+            }
             player.orbitingCube.renderedX = player.renderedX + player.orbitingCube.radius * std::cos(player.orbitingCube.angle);
             player.orbitingCube.renderedY = player.renderedY + player.orbitingCube.radius * std::sin(player.orbitingCube.angle);
         }

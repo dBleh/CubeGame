@@ -114,14 +114,13 @@ void GameplayState::UpdatePlayingState(float dt) {
 
     Player& localPlayer = game->GetLocalPlayer();
     if (localPlayer.isAlive) {
-        bool playerMoved = localPlayer.move(dt);
+        localPlayer.move(dt); // Always update movement
         localPlayer.updateOrbitingCube(dt);
-        if (playerMoved) {
-            localPlayer.renderedX = localPlayer.x;
-            localPlayer.renderedY = localPlayer.y;
-            localPlayer.shape.setPosition(localPlayer.renderedX, localPlayer.renderedY);
-            game->GetNetworkManager()->ThrottledSendPlayerUpdate();
-        }
+        localPlayer.renderedX = localPlayer.x;
+        localPlayer.renderedY = localPlayer.y;
+        localPlayer.shape.setPosition(localPlayer.renderedX, localPlayer.renderedY);
+        game->GetNetworkManager()->ThrottledSendPlayerUpdate(); // Always send update
+
         if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
             Player& updatedLocalPlayer = game->GetLocalPlayer();
             if (updatedLocalPlayer.isAlive) {

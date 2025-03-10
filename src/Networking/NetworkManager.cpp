@@ -73,23 +73,9 @@ bool NetworkManager::broadcastMessage(const std::string &msg) {
 
 void NetworkManager::processCallbacks() {
     SteamAPI_RunCallbacks();
-    
-    for (auto& [id, state] : m_playerStates) {
-        if (game->entityManager->getPlayers().count(id) > 0) {
-            Player& p = game->entityManager->getPlayers()[id];
-            if (id != game->localSteamID) {
-                float t = state.interpolationClock.getElapsedTime().asSeconds() / INTERPOLATION_TIME;
-                if (t <= 1.0f) {
-                    p.renderedX = state.lastX + (state.targetX - state.lastX) * t;
-                    p.renderedY = state.lastY + (state.targetY - state.lastY) * t;
-                    p.shape.setPosition(p.renderedX, p.renderedY);
-                }
-            }
-        }
-    }
-
+    // Remove PlayerState interpolation logic here; rely on EntityManager
     if (usageClock.getElapsedTime().asSeconds() >= usageReportInterval) {
-        // ReportNetworkUsage();
+        ReportNetworkUsage();
         ResetNetworkUsage();
         usageClock.restart();
     }
@@ -210,7 +196,31 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
         game->entityManager->getPlayers()[id] = newPlayer;
     }
     Player& p = game->entityManager->getPlayers()[id];
-
+    if (id != game->localSteamID) {
+        if (isKeyValue) {
+            float oldX = p.x, oldY = p.y;
+            size_t i = 3;
+            while (i + 1 < parts.size()) {
+                if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
+                else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
+                else if (parts[i] == "h") p.health = std::stoi(parts[i + 1]);
+                else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]) != 0;
+                else if (parts[i] == "k") p.kills = std::stoi(parts[i + 1]);
+                else if (parts[i] == "m") p.money = std::stoi(parts[i + 1]);
+                else if (parts[i] == "s") p.speed = std::stof(parts[i + 1]);
+                i += 2;
+            }
+            float dt = Player::INTERPOLATION_DURATION; // Assume update interval
+            p.velocityX = (p.x - oldX) / dt;
+            p.velocityY = (p.y - oldY) / dt;
+            p.lastX = p.renderedX;
+            p.lastY = p.renderedY;
+            p.interpolationTime = Player::INTERPOLATION_DURATION;
+        }
+        // Update orbiting cube position based on current angle
+        p.orbitingCube.x = p.x + p.orbitingCube.radius * std::cos(p.orbitingCube.angle);
+        p.orbitingCube.y = p.y + p.orbitingCube.radius * std::sin(p.orbitingCube.angle);
+    }
     if (id == game->localSteamID) {
         if (isKeyValue) {
             size_t i = 3;
@@ -511,6 +521,8 @@ void NetworkManager::SendPlayerUpdate() {
     oss << "P|D|" << p.steamID.ConvertToUint64()
         << "|x|" << p.x
         << "|y|" << p.y
+        << "|vx|" << p.velocityX 
+        << "|vy|" << p.velocityY
         << "|h|" << p.health
         << "|k|" << p.kills
         << "|r|" << (p.ready ? 1 : 0)
@@ -549,9 +561,9 @@ void NetworkManager::SendGameplayMessage(const std::string& msg) {
 }
 
 void NetworkManager::ThrottledSendPlayerUpdate() {
-    const float playerUpdateRate = 0.033f; // Send updates every 0.1 seconds
+    const float playerUpdateRate = 0.033f; // 30 Hz
     if (m_playerUpdateClock.getElapsedTime().asSeconds() >= playerUpdateRate) {
-        SendPlayerUpdate(); // Send update regardless of movement
+        SendPlayerUpdate(); // Send unconditionally
         m_playerUpdateClock.restart();
     }
 }
