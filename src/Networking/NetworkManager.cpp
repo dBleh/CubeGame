@@ -549,7 +549,7 @@ void NetworkManager::SendGameplayMessage(const std::string& msg) {
 }
 
 void NetworkManager::ThrottledSendPlayerUpdate() {
-    const float playerUpdateRate = 0.1f; // Send updates every 0.1 seconds
+    const float playerUpdateRate = 0.033f; // Send updates every 0.1 seconds
     if (m_playerUpdateClock.getElapsedTime().asSeconds() >= playerUpdateRate) {
         SendPlayerUpdate(); // Send update regardless of movement
         m_playerUpdateClock.restart();

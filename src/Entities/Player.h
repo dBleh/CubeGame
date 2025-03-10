@@ -23,6 +23,8 @@ struct Player {
         float angularSpeed;      // Speed of rotation (radians per second)
         sf::RectangleShape shape;// Visual representation
         bool active;             // Whether the cube is active
+        float velocityX = 0.0f;
+        float velocityY = 0.0f;
 
         OrbitingCube() : x(0), y(0), renderedX(0), renderedY(0), lastX(0), lastY(0),
                          radius(50.f), angle(0.f), angularSpeed(2.f), active(false) {
