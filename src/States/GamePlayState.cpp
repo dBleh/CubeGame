@@ -119,7 +119,7 @@ void GameplayState::UpdatePlayingState(float dt) {
         localPlayer.renderedX = localPlayer.x;
         localPlayer.renderedY = localPlayer.y;
         localPlayer.shape.setPosition(localPlayer.renderedX, localPlayer.renderedY);
-        game->GetNetworkManager()->ThrottledSendPlayerUpdate(); // Always send update
+        //game->GetNetworkManager()->ThrottledSendPlayerUpdate(); // Always send update
 
         if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
             Player& updatedLocalPlayer = game->GetLocalPlayer();
@@ -269,7 +269,7 @@ void GameplayState::HandleStorePurchase() {
         localPlayer.money -= 50;
         localPlayer.speed += 50.f;
         game->GetPlayers()[localPlayer.steamID] = localPlayer;
-        game->GetNetworkManager()->ThrottledSendPlayerUpdate();
+        //game->GetNetworkManager()->ThrottledSendPlayerUpdate();
     }
 }
 
