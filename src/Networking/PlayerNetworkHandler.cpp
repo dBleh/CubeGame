@@ -61,8 +61,8 @@ void PlayerNetworkHandler::HandlePlayerUpdate(const std::string& msg, CSteamID s
                 p.lastX = p.renderedX;
                 p.lastY = p.renderedY;
                 // Update target positions and state
-                p.targetX = x;  // Set target position from network
-                p.targetY = y;  // Set target position from network
+                p.targetX = x;
+                p.targetY = y;
                 p.health = health;
                 p.kills = kills;
                 p.money = money;
@@ -70,20 +70,13 @@ void PlayerNetworkHandler::HandlePlayerUpdate(const std::string& msg, CSteamID s
                 p.isAlive = isAlive != 0;
                 p.interpolationTime = Player::INTERPOLATION_TIME; // Reset interpolation timer
 
+                // Debugging output to confirm updates
+                std::cout << "Received update for player " << steamID << ": targetX=" << x << ", targetY=" << y << "\n";
+
                 // If host, relay to other clients (except sender and self)
                 if (game->IsHost() && id != game->GetLocalPlayer().steamID) {
                     SendPlayerUpdate();
                 }
-            }
-        }
-    } else if (msg.find("PLAYER_LOADED|") == 0) {
-        uint64_t steamID;
-        if (sscanf(msg.c_str(), "PLAYER_LOADED|%llu", &steamID) == 1) {
-            CSteamID id(steamID);
-            auto& players = game->GetEntityManager()->getPlayers();
-            if (players.count(id)) {
-                game->playerLoadedStatus[id] = true;
-                std::cout << "Player " << steamID << " loaded\n";
             }
         }
     }

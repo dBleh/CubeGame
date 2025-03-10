@@ -33,6 +33,7 @@ GameplayState::GameplayState(CubeGame* game)
 // Update Function
 //---------------------------------------------------------
 void GameplayState::Update(float dt) {
+    game->GetNetworkManager()->processCallbacks();
     // Logic updates with fixed dt (e.g., 1/60s)
     if (game->IsHost()) {
         // Removed: game->GetNetworkManager()->receiveMessages();

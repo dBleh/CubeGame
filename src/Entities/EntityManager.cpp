@@ -233,22 +233,37 @@ void EntityManager::interpolateEntities(float alpha, CubeGame* game) {
             player.orbitingCube.renderedX = player.orbitingCube.x;
             player.orbitingCube.renderedY = player.orbitingCube.y;
         } else {
-            // Remote players: Interpolation is handled in NetworkManager::processCallbacks
-            // Update orbiting cube based on rendered position and angle
+            // Remote players: Rely on NetworkManager interpolation
+            // Just update orbiting cube based on rendered position
             player.orbitingCube.renderedX = player.renderedX + player.orbitingCube.radius * std::cos(player.orbitingCube.angle);
             player.orbitingCube.renderedY = player.renderedY + player.orbitingCube.radius * std::sin(player.orbitingCube.angle);
         }
         player.shape.setPosition(player.renderedX, player.renderedY);
         player.orbitingCube.shape.setPosition(player.orbitingCube.renderedX, player.orbitingCube.renderedY);
     }
+
     for (auto& [id, bullet] : m_bullets) {
         bullet.renderedX = bullet.lastX + (bullet.x - bullet.lastX) * alpha;
         bullet.renderedY = bullet.lastY + (bullet.y - bullet.lastY) * alpha;
         bullet.shape.setPosition(bullet.renderedX, bullet.renderedY);
     }
+
     for (auto& [id, enemy] : m_enemies) {
-        enemy.renderedX = enemy.lastX + (enemy.x - enemy.lastX) * alpha;
-        enemy.renderedY = enemy.lastY + (enemy.y - enemy.lastY) * alpha;
+        if (enemy.interpolationTime > 0.0f) {
+            enemy.renderedX = enemy.lastX + (enemy.x - enemy.lastX) * alpha;
+            enemy.renderedY = enemy.lastY + (enemy.y - enemy.lastY) * alpha;
+            enemy.interpolationTime -= fixedDt;
+            if (enemy.interpolationTime <= 0.0f) {
+                enemy.renderedX = enemy.x;
+                enemy.renderedY = enemy.y;
+                enemy.lastX = enemy.x;
+                enemy.lastY = enemy.y;
+            }
+        } else {
+            enemy.renderedX = enemy.x;
+            enemy.renderedY = enemy.y;
+        }
+        enemy.shape.setPosition(enemy.renderedX, enemy.renderedY);
     }
 }
 
@@ -403,6 +418,7 @@ void EntityManager::applyQueuedUpdates() {
                     newEnemy.renderedY = update.y;
                     newEnemy.lastX = update.x;
                     newEnemy.lastY = update.y;
+                    newEnemy.interpolationTime = 0.0f; // No interpolation for spawn
                 }
                 break;
             case EntityUpdate::Type::Update:
@@ -414,7 +430,7 @@ void EntityManager::applyQueuedUpdates() {
                     e.y = update.y;
                     e.health = update.health;
                     e.spawnDelay = update.spawnDelay;
-                    e.interpolationTime = INTERPOLATION_TIME;
+                    e.interpolationTime = INTERPOLATION_TIME; // Reset for smooth transition
                 }
                 break;
             case EntityUpdate::Type::Remove:
