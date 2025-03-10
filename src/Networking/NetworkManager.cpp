@@ -227,33 +227,27 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
             game->GetLocalPlayer() = p;
         }
     } else {
-        float newX = p.x;
-        float newY = p.y;
-        uint64_t receivedTimestamp = p.lastUpdateTimestamp;
-
         if (!isKeyValue) {
             p.lastX = p.x;
             p.lastY = p.y;
-            newX = std::stof(parts[2]);
-            newY = std::stof(parts[3]);
+            p.x = std::stof(parts[2]);
+            p.y = std::stof(parts[3]);
             p.renderedX = std::stof(parts[4]);
             p.renderedY = std::stof(parts[5]);
             p.health = std::stoi(parts[6]);
             p.kills = std::stoi(parts[7]);
             p.ready = std::stoi(parts[8]) != 0;
-            p.money = std::stof(parts[9]);
+            p.money = std::stoi(parts[9]);
             p.speed = std::stof(parts[10]);
             p.isAlive = std::stoi(parts[11]) != 0;
-            // Assume timestamp isn't provided in this format, use current time
-            receivedTimestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::system_clock::now().time_since_epoch()).count();
         } else {
             float receivedAngle = p.orbitingCube.angle;
             uint64_t receivedStartTimestamp = p.startTimestamp;
+            uint64_t receivedTimestamp = p.lastUpdateTimestamp;
             size_t i = 3;
             while (i + 1 < parts.size()) {
-                if (parts[i] == "x") newX = std::stof(parts[i + 1]);
-                else if (parts[i] == "y") newY = std::stof(parts[i + 1]);
+                if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
+                else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
                 else if (parts[i] == "rx") p.renderedX = std::stof(parts[i + 1]);
                 else if (parts[i] == "ry") p.renderedY = std::stof(parts[i + 1]);
                 else if (parts[i] == "h") p.health = std::stoi(parts[i + 1]);
@@ -273,25 +267,6 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
                 p.lastUpdateTimestamp = receivedTimestamp;
                 p.startTimestamp = receivedStartTimestamp;
                 p.orbitingCube.angle = receivedAngle;
-
-                // Calculate velocity based on position change
-                float deltaTime = (receivedTimestamp - p.lastUpdateTimestamp) / 1000.0f;
-                if (deltaTime > 0 && p.lastUpdateTimestamp != 0) {  // Avoid division by zero or first update
-                    p.velocityX = (newX - p.x) / deltaTime;
-                    p.velocityY = (newY - p.y) / deltaTime;
-                } else {
-                    p.velocityX = 0.0f;
-                    p.velocityY = 0.0f;
-                }
-
-                // Update positions
-                p.lastX = p.x;
-                p.lastY = p.y;
-                p.x = newX;
-                p.y = newY;
-
-                // Reset interpolation timer
-                p.interpolationTime = INTERPOLATION_TIME;  // Assuming INTERPOLATION_TIME is defined (e.g., 0.1f)
             }
 
             // Calculate current angle based on total elapsed time since start
@@ -303,8 +278,9 @@ void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
 
             p.orbitingCube.x = p.x + p.orbitingCube.radius * std::cos(p.orbitingCube.angle);
             p.orbitingCube.y = p.y + p.orbitingCube.radius * std::sin(p.orbitingCube.angle);
+            p.lastX = p.x;
+            p.lastY = p.y;
         }
-
         p.shape.setPosition(p.renderedX, p.renderedY);
         p.orbitingCube.shape.setPosition(p.orbitingCube.x, p.orbitingCube.y);
     }

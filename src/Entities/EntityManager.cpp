@@ -221,26 +221,21 @@ void EntityManager::spawnEnemies(int enemiesPerWave, const std::unordered_map<CS
 //-------------------------------------------------------------------------
 // Interpolate Entities
 //-------------------------------------------------------------------------
-void EntityManager::interpolateEntities(float dt, CubeGame* game) {
-    updateEntities(dt); // Use actual dt instead of fixedDt for consistency
+void EntityManager::interpolateEntities(float alpha, CubeGame* game) {
+    const float fixedDt = 1.0f / 60.0f;
+    updateEntities(fixedDt);
 
     for (auto& [id, player] : m_players) {
         if (id == game->GetLocalPlayer().steamID) {
+            // Local player: Use current position from updateOrbitingCube
             player.renderedX = player.x;
             player.renderedY = player.y;
             player.orbitingCube.renderedX = player.orbitingCube.x;
             player.orbitingCube.renderedY = player.orbitingCube.y;
         } else {
-            if (player.interpolationTime > 0) {
-                float t = 1.0f - (player.interpolationTime / INTERPOLATION_TIME);
-                player.renderedX = player.lastX + (player.x - player.lastX) * t;
-                player.renderedY = player.lastY + (player.y - player.lastY) * t;
-                player.interpolationTime -= dt;
-                if (player.interpolationTime < 0) player.interpolationTime = 0;
-            } else {
-                player.renderedX = player.x;
-                player.renderedY = player.y;
-            }
+            // Remote players: Interpolate player position only, cube follows angle
+            player.renderedX = player.lastX + (player.x - player.lastX) * alpha;
+            player.renderedY = player.lastY + (player.y - player.lastY) * alpha;
             player.orbitingCube.renderedX = player.renderedX + player.orbitingCube.radius * std::cos(player.orbitingCube.angle);
             player.orbitingCube.renderedY = player.renderedY + player.orbitingCube.radius * std::sin(player.orbitingCube.angle);
         }
@@ -248,13 +243,13 @@ void EntityManager::interpolateEntities(float dt, CubeGame* game) {
         player.orbitingCube.shape.setPosition(player.orbitingCube.renderedX, player.orbitingCube.renderedY);
     }
     for (auto& [id, bullet] : m_bullets) {
-        bullet.renderedX = bullet.lastX + (bullet.x - bullet.lastX) * dt;
-        bullet.renderedY = bullet.lastY + (bullet.y - bullet.lastY) * dt;
+        bullet.renderedX = bullet.lastX + (bullet.x - bullet.lastX) * alpha;
+        bullet.renderedY = bullet.lastY + (bullet.y - bullet.lastY) * alpha;
         bullet.shape.setPosition(bullet.renderedX, bullet.renderedY);
     }
     for (auto& [id, enemy] : m_enemies) {
-        enemy.renderedX = enemy.lastX + (enemy.x - enemy.lastX) * dt;
-        enemy.renderedY = enemy.lastY + (enemy.y - enemy.lastY) * dt;
+        enemy.renderedX = enemy.lastX + (enemy.x - enemy.lastX) * alpha;
+        enemy.renderedY = enemy.lastY + (enemy.y - enemy.lastY) * alpha;
     }
 }
 
