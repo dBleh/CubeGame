@@ -51,7 +51,7 @@ struct Player {
     float interpolationTime = 0.0f; 
     float velocityX = 0.0f;  // Velocity in X direction
     float velocityY = 0.0f;
-    static const float INTERPOLATION_DURATION = 0.1f;    //-------------------------------------------------------------------------
+    inline static const float INTERPOLATION_DURATION = 0.1f;
     // Gameplay Properties
     //-------------------------------------------------------------------------
     int health = PLAYER_HEALTH;   ///< Player health.
