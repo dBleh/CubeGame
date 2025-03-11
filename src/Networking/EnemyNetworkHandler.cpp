@@ -36,13 +36,19 @@ void EnemyNetworkHandler::HandleEnemyUpdate(const std::string& msg) {
         if (!game->networkManager->m_lastEnemyUpdateTime.count(enemyID) || 
             game->networkManager->m_lastEnemyUpdateTime[enemyID] < timestamp) {
             EntityUpdate update;
-            update.type = EntityUpdate::Type::Update;
+            update.type = (game->entityManager->getEnemies().count(enemyID) > 0) 
+                        ? EntityUpdate::Type::Update 
+                        : EntityUpdate::Type::Spawn; // Treat as spawn if missing
             update.id = enemyID;
             update.x = x;
             update.y = y;
             update.health = health;
             update.spawnDelay = spawnDelay;
             update.timestamp = timestamp;
+            // Assume default type if spawning (could improve with type in message)
+            if (update.type == EntityUpdate::Type::Spawn) {
+                update.enemyType = Enemy::Default; // Adjust as needed
+            }
             game->entityManager->queueUpdate(update);
             game->networkManager->m_lastEnemyUpdateTime[enemyID] = timestamp;
         }
