@@ -10,7 +10,7 @@
 //-------------------------------------------------------------------------
 // Constructor & Destructor
 //-------------------------------------------------------------------------
-EntityManager::EntityManager() : lastEnemyUpdateTime(0.0f), enemyUpdateInterval(0.5f) {}
+EntityManager::EntityManager() : lastEnemyUpdateTime(0.0f), enemyUpdateInterval(0.5f), game(nullptr) {}
 
 EntityManager::~EntityManager() {}
 
@@ -30,15 +30,12 @@ std::unordered_map<uint64_t, Enemy>& EntityManager::getEnemies() {
 }
 
 Player& EntityManager::getLocalPlayer(CubeGame* game) {
-    // This function returns the local player.
-    // In this simple implementation, we assume the local player is the first in the map.
-    return m_players.begin()->second;
+    return m_players[game->GetLocalPlayer().steamID]; // Updated to use steamID
 }
 
 //-------------------------------------------------------------------------
 // Update Entities
 //-------------------------------------------------------------------------
-
 void EntityManager::updateEntities(float dt) {
     for (auto it = m_bullets.begin(); it != m_bullets.end();) {
         it->second.update(dt);
@@ -55,7 +52,6 @@ void EntityManager::updateEntities(float dt) {
     updateCollisionGrid();
     lastEnemyUpdateTime += dt;
     bool shouldSendUpdate = lastEnemyUpdateTime >= enemyUpdateInterval;
-    std::vector<uint64_t> enemiesToRemove;
 
     for (const auto& [playerId, player] : m_players) {
         if (!player.isAlive) continue;
@@ -66,8 +62,12 @@ void EntityManager::updateEntities(float dt) {
                 int key = (px + dx) * 1000 + (py + dy);
                 if (collisionGrid.count(key)) {
                     auto& enemyIds = collisionGrid[key].enemyIds;
-                    for (auto it = enemyIds.begin(); it != enemyIds.end(); ) {
+                    for (auto it = enemyIds.begin(); it != enemyIds.end();) {
                         uint64_t enemyId = *it;
+                        if (!m_enemies.count(enemyId)) {
+                            it = enemyIds.erase(it);
+                            continue;
+                        }
                         Enemy& enemy = m_enemies[enemyId];
                         if (enemy.health <= 0) {
                             it = enemyIds.erase(it);
@@ -80,7 +80,7 @@ void EntityManager::updateEntities(float dt) {
                             static uint64_t splitCounter = 0;
                             uint64_t newId = enemy.id + (splitCounter << 32) + 1;
                             splitCounter++;
-                        
+
                             enemy.size *= 0.7f;
                             enemy.health /= 2;
                             enemy.splitCount++;
@@ -88,7 +88,7 @@ void EntityManager::updateEntities(float dt) {
                             enemy.isSplitting = false;
                             enemy.shouldStopMoving = false;
                             enemy.needsSync = true;
-                        
+
                             auto& newEnemy = m_enemies.emplace(newId, Enemy()).first->second;
                             newEnemy.initialize(Enemy::Splitter);
                             newEnemy.health = enemy.health;
@@ -105,8 +105,8 @@ void EntityManager::updateEntities(float dt) {
                             newEnemy.interpolationTime = 0.f;
                             newEnemy.spawnDelay = 0.1f;
                             newEnemy.needsSync = true;
-                        
-                            if (game->IsHost()) {
+
+                            if (game && game->IsHost()) {
                                 uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
                                     std::chrono::system_clock::now().time_since_epoch()).count();
                                 char buffer[128];
@@ -115,6 +115,7 @@ void EntityManager::updateEntities(float dt) {
                                                      static_cast<int>(newEnemy.type), timestamp);
                                 if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                                     game->GetNetworkManager()->broadcastMessage(std::string(buffer));
+                                    std::cout << "[Host] Broadcasted split spawn: " << buffer << std::endl;
                                 }
                             }
                         }
@@ -162,7 +163,7 @@ void EntityManager::updateEntities(float dt) {
                         enemy.y += separationForce.y * separationStrength * dt;
 
                         if (shouldSendUpdate && (std::abs(enemy.x - enemy.lastSentX) > 10.0f || std::abs(enemy.y - enemy.lastSentY) > 10.0f)) {
-                            enemy.needsSync = true; // Flag position change
+                            enemy.needsSync = true;
                         }
                         ++it;
                     }
@@ -176,15 +177,12 @@ void EntityManager::updateEntities(float dt) {
     }
 }
 
-
 //-------------------------------------------------------------------------
 // Spawn Enemies
 //-------------------------------------------------------------------------
 void EntityManager::spawnEnemies(int enemiesPerWave, const std::unordered_map<CSteamID, Player, CSteamIDHash>& players, uint64_t hostID) {
-    // Clear any existing enemies.
-    m_enemies.clear();
-    
-    // Calculate the average position of alive players.
+    m_enemies.clear(); // Clear existing enemies
+
     sf::Vector2f avgPos(0.f, 0.f);
     int alivePlayers = 0;
     for (const auto& pair : players) {
@@ -199,8 +197,6 @@ void EntityManager::spawnEnemies(int enemiesPerWave, const std::unordered_map<CS
         avgPos.y /= alivePlayers;
     }
 
-    // Randomize spawn parameters.
-    float spawnRadius = 100.0f; // (Unused, but could be used for future logic)
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<> angleDist(0, 2 * M_PI);
@@ -209,7 +205,6 @@ void EntityManager::spawnEnemies(int enemiesPerWave, const std::unordered_map<CS
 
     for (int i = 0; i < enemiesPerWave; i++) {
         Enemy e;
-        // Randomly choose between Splitter and Default enemy types.
         e.initialize(typeDist(gen) == 1 ? Enemy::Splitter : Enemy::Default);
         float angle = angleDist(gen);
         float dist = distDist(gen);
@@ -222,7 +217,6 @@ void EntityManager::spawnEnemies(int enemiesPerWave, const std::unordered_map<CS
         e.lastSentX = e.x;
         e.lastSentY = e.y;
         e.shape.setPosition(e.x, e.y);
-        // Generate enemy ID based on hostID and enemy index.
         e.id = ((hostID & 0xFFFF) << 16) | (i & 0xFFFF);
         m_enemies[e.id] = e;
     }
@@ -237,13 +231,11 @@ void EntityManager::interpolateEntities(float alpha, CubeGame* game) {
 
     for (auto& [id, player] : m_players) {
         if (id == game->GetLocalPlayer().steamID) {
-            // Local player: Use current position from updateOrbitingCube
             player.renderedX = player.x;
             player.renderedY = player.y;
             player.orbitingCube.renderedX = player.orbitingCube.x;
             player.orbitingCube.renderedY = player.orbitingCube.y;
         } else {
-            // Remote players: Interpolate player position only, cube follows angle
             player.renderedX = player.lastX + (player.x - player.lastX) * alpha;
             player.renderedY = player.lastY + (player.y - player.lastY) * alpha;
             player.orbitingCube.renderedX = player.renderedX + player.orbitingCube.radius * std::cos(player.orbitingCube.angle);
@@ -269,13 +261,11 @@ void EntityManager::interpolateEntities(float alpha, CubeGame* game) {
 void EntityManager::updateCollisionGrid() {
     collisionGrid.clear();
     const float cellSize = 100.f;
-    // Populate the grid with enemy positions.
     for (const auto& [id, enemy] : m_enemies) {
         if (enemy.health <= 0) continue;
         int key = (int(enemy.renderedX / cellSize)) * 1000 + (int(enemy.renderedY / cellSize));
         collisionGrid[key].enemyIds.push_back(id);
     }
-    // Populate the grid with bullet positions.
     for (const auto& [id, bullet] : m_bullets) {
         int key = (int(bullet.renderedX / cellSize)) * 1000 + (int(bullet.renderedY / cellSize));
         collisionGrid[key].bulletIds.push_back(id);
@@ -301,7 +291,7 @@ void EntityManager::checkCollisions(
                     const GridCell& cell = collisionGrid[key];
                     for (uint64_t enemyId : cell.enemyIds) {
                         if (m_enemies.count(enemyId) == 0) {
-                            std::cout << "[Client] Skipping collision with missing enemy " << enemyId << "\n";
+                            std::cout << "[EntityManager] Skipping collision with missing enemy " << enemyId << "\n";
                             continue;
                         }
                         Enemy& enemy = m_enemies[enemyId];
@@ -334,23 +324,15 @@ void EntityManager::checkCollisions(
                 int key = (cx + dx) * 1000 + (cy + dy);
                 if (collisionGrid.count(key)) {
                     auto& enemyIds = collisionGrid[key].enemyIds;
-                    for (auto it = enemyIds.begin(); it != enemyIds.end();) {
+                    for (auto it = enemyIds.begin(); it != enemyIds.end(); ++it) {
                         Enemy& enemy = m_enemies[*it];
                         if (enemy.health > 0 && 
                             player.getOrbitingCubeBounds().intersects(enemy.getBounds())) {
-                            enemy.health -= 10;
-                            enemy.needsSync = true; // Flag for sync
-
-                            if (enemy.health <= 0) {
-                                player.kills += 1;
-                                player.money += 10;
-                                m_enemies.erase(*it);
-                                it = enemyIds.erase(it);
-                            } else {
-                                ++it;
+                            if (game && !game->IsHost()) {
+                                // Client: Flag for sync, don't modify locally
+                                enemy.needsSync = true;
                             }
-                        } else {
-                            ++it;
+                            // Host handles damage in NetworkManager::HandleCollisionsAndSync
                         }
                     }
                 }
@@ -366,13 +348,17 @@ void EntityManager::checkCollisions(
                 int key = (px + dx) * 1000 + (py + dy);
                 if (collisionGrid.count(key)) {
                     auto& enemyIds = collisionGrid[key].enemyIds;
-                    for (auto it = enemyIds.begin(); it != enemyIds.end();) {
+                    for (auto it = enemyIds.begin(); it != enemyIds.end(); ++it) {
                         Enemy& enemy = m_enemies[*it];
                         if (playerIt->second.shape.getGlobalBounds().intersects(enemy.getBounds())) {
                             onEnemyPlayerCollision(playerIt->first, *it);
-                            enemy.needsSync = true; // Flag for sync
-                            m_enemies.erase(*it);
-                            it = enemyIds.erase(it);
+                            enemy.needsSync = true;
+                            if (game && !game->IsHost()) {
+                                // Client: Don't erase, let host handle
+                            } else if (game && game->IsHost()) {
+                                m_enemies.erase(*it);
+                                it = enemyIds.erase(it);
+                            }
                         } else {
                             ++it;
                         }
@@ -384,15 +370,9 @@ void EntityManager::checkCollisions(
 }
 
 //-------------------------------------------------------------------------
-// Set Enemy Update Callback
-//-------------------------------------------------------------------------
-
-
-//-------------------------------------------------------------------------
 // Check if Entities are Initialized
 //-------------------------------------------------------------------------
 bool EntityManager::areEntitiesInitialized() const {
-    // Simple check: there should be at least one player.
     return !m_players.empty();
 }
 
@@ -405,7 +385,7 @@ void EntityManager::applyQueuedUpdates() {
         const EntityUpdate& update = updateQueue.front();
         switch (update.type) {
             case EntityUpdate::Type::Spawn:
-                queuePendingEnemy(update); // Buffer instead of direct insert
+                queuePendingEnemy(update);
                 break;
             case EntityUpdate::Type::Update:
                 if (m_enemies.count(update.id) > 0) {
@@ -418,10 +398,15 @@ void EntityManager::applyQueuedUpdates() {
                     e.spawnDelay = update.spawnDelay;
                     e.type = update.enemyType;
                     e.interpolationTime = INTERPOLATION_TIME;
+                    std::cout << "[EntityManager] Updated enemy " << update.id << " to (" << e.x << ", " << e.y << "), health: " << e.health << std::endl;
+                } else {
+                    std::cout << "[EntityManager] Update ignored for missing enemy " << update.id << std::endl;
                 }
                 break;
             case EntityUpdate::Type::Remove:
-                m_enemies.erase(update.id);
+                if (m_enemies.erase(update.id)) {
+                    std::cout << "[EntityManager] Removed enemy " << update.id << std::endl;
+                }
                 break;
         }
         updateQueue.pop();
@@ -441,13 +426,17 @@ void EntityManager::queuePendingEnemy(const EntityUpdate& update) {
         newEnemy.renderedY = update.y;
         newEnemy.lastX = update.x;
         newEnemy.lastY = update.y;
+        newEnemy.lastSentX = update.x;
+        newEnemy.lastSentY = update.y;
         pendingEnemies.emplace_back(update.id, newEnemy);
+        std::cout << "[EntityManager] Queued spawn for enemy " << update.id << " at (" << update.x << ", " << update.y << ")" << std::endl;
     }
 }
 
 void EntityManager::applyPendingEnemies() {
     for (auto& [id, enemy] : pendingEnemies) {
         m_enemies.emplace(id, std::move(enemy));
+        std::cout << "[EntityManager] Applied spawn for enemy " << id << std::endl;
     }
     pendingEnemies.clear();
 }
