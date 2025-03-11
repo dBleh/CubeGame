@@ -40,7 +40,8 @@ public:
 
     void ReportNetworkUsage() const;
     void ResetNetworkUsage();
-
+}
+    void Update(float dt);
     // Network/game functions
     void ProcessNetworkMessages(const std::string& msg, CSteamID sender);
     void SendGameplayMessage(const std::string& msg);
