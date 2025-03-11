@@ -336,11 +336,11 @@ void NetworkManager::SyncEnemies() {
     uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
     
-    // Track enemies to keep
-    std::unordered_set<uint64_t> activeEnemies;
+    // Track all active enemies on host
+    std::unordered_set<uint64_t> currentEnemies;
     for (const auto& [enemyId, enemy] : game->entityManager->getEnemies()) {
         if (enemy.health > 0) {
-            activeEnemies.insert(enemyId);
+            currentEnemies.insert(enemyId);
             char buffer[128];
             int bytes = snprintf(buffer, sizeof(buffer), "E|SPAWN|%llu|%.1f|%.1f|%d|%.2f|%d|%llu",
                                 enemy.id, enemy.x, enemy.y, enemy.health, enemy.spawnDelay,
@@ -352,9 +352,9 @@ void NetworkManager::SyncEnemies() {
         }
     }
     
-    // Remove enemies no longer active
+    // Remove enemies that no longer exist
     for (auto it = m_lastEnemyUpdateTime.begin(); it != m_lastEnemyUpdateTime.end();) {
-        if (!activeEnemies.count(it->first)) {
+        if (!currentEnemies.count(it->first)) {
             char buffer[64];
             int bytes = snprintf(buffer, sizeof(buffer), "E|REMOVE|%llu", it->first);
             if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
