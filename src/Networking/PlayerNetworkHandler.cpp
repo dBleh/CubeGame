@@ -148,7 +148,7 @@ void PlayerNetworkHandler::SendPlayerUpdate() {
 }
 
 void PlayerNetworkHandler::ThrottledSendPlayerUpdate() {
-    const float playerUpdateRate = 0.033f; // Send updates every 0.033 seconds (~30Hz)
+    const float playerUpdateRate = 0f; // Send updates every 0.033 seconds (~30Hz)
     if (m_playerUpdateClock.getElapsedTime().asSeconds() >= playerUpdateRate) {
         SendPlayerUpdate();
         m_playerUpdateClock.restart();

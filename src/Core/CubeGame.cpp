@@ -340,7 +340,6 @@ void CubeGame::ToggleReady() {
     localPlayer.ready = !localPlayer.ready;
     SteamMatchmaking()->SetLobbyMemberData(m_currentLobby, "ready", localPlayer.ready ? "1" : "0");
     entityManager->getPlayers()[localSteamID].ready = localPlayer.ready;
-    networkManager->SendPlayerUpdate();
 }
 
 // Returns to the lobby, resetting player and game state for a new session.
