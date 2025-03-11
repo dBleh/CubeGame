@@ -536,7 +536,7 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
                              b.id, enemyId, b.shooterSteamID.ConvertToUint64(), damage, timestamp);
                     SendGameplayMessage(std::string(hitBuffer));
                 }
-            } else if (game->IsHost()) {
+            } elseif (game->IsHost()) {
                 game->GetEntityManager()->checkCollisions(
                     [&](const Bullet& b, uint64_t enemyId) {
                         if (game->GetEnemies().count(enemyId)) {
@@ -551,10 +551,10 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
                                     broadcastMessage(std::string(buffer));
                                     game->GetEntityManager()->getEnemies().erase(enemyId);
                                     std::cout << "[Host] Removed enemy " << enemyId << "\n";
-                                }
-                            }
-                        }
-                    },
+            }
+        }
+    }
+        },
         [&](CSteamID playerId, uint64_t enemyId) {
             if (game->GetPlayers().count(playerId)) {
                 Player& player = game->GetPlayers()[playerId];
