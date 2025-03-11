@@ -981,3 +981,4 @@ void NetworkManager::syncEntities(EntityManager* em) {
             ++it;
         }
     }
+}
