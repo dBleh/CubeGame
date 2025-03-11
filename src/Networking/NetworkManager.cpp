@@ -503,15 +503,19 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
     GameplayState* gameplayState = game->GetGameplayState();
     if (!gameplayState) return;
 
+    // Bullet-enemy collisions
     game->GetEntityManager()->checkCollisions(
         [&](const Bullet& b, uint64_t enemyId) {
-            int damage = 10;
+            int damage = 10; // Consistent damage value
             if (game->IsHost() && game->GetEnemies().count(enemyId)) {
-                if (b.shooterSteamID == game->GetLocalPlayer().steamID) {
-                    Enemy& enemy = game->GetEnemies()[enemyId];
-                    enemy.health -= damage;
-                    if (enemy.health <= 0) {
-                        game->GetEntityManager()->getEnemies().erase(enemyId);
+                Enemy& enemy = game->GetEnemies()[enemyId];
+                enemy.health -= damage;
+                std::cout << "[Host] Enemy " << enemyId << " hit by bullet " << b.id 
+                          << ", health now " << enemy.health << "\n";
+
+                if (enemy.health <= 0) {
+                    // Update shooter stats if local player
+                    if (b.shooterSteamID == game->GetLocalPlayer().steamID) {
                         Player& shooter = game->GetLocalPlayer();
                         shooter.kills += 1;
                         shooter.money += 10;
@@ -522,50 +526,63 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
                                              shooter.steamID.ConvertToUint64(), shooter.kills, shooter.money);
                         if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                             broadcastMessage(std::string(buffer));
-                        }
-                        bytes = snprintf(buffer, sizeof(buffer), "E|REMOVE|%llu", enemyId);
-                        if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
-                            broadcastMessage(std::string(buffer));
+                        } else {
+                            std::cerr << "[Host] Failed to format P|D message for player " 
+                                      << shooter.steamID.ConvertToUint64() << "\n";
                         }
                     }
-                } else {
+
+                    // Remove enemy and notify clients
+                    char buffer[64];
+                    int bytes = snprintf(buffer, sizeof(buffer), "E|REMOVE|%llu", enemyId);
+                    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
+                        broadcastMessage(std::string(buffer));
+                        game->GetEntityManager()->getEnemies().erase(enemyId);
+                        std::cout << "[Host] Removed enemy " << enemyId << " due to health <= 0\n";
+                    } else {
+                        std::cerr << "[Host] Failed to format E|REMOVE message for enemy " << enemyId << "\n";
+                    }
+                }
+            } else if (!game->IsHost() && game->GetEnemies().count(enemyId)) {
+                const Enemy& enemy = game->GetEnemies().at(enemyId);
+                if (enemy.health > 0) { // Only send hit if alive on client
                     uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::system_clock::now().time_since_epoch()).count();
                     char hitBuffer[128];
-                    snprintf(hitBuffer, sizeof(hitBuffer), "H|%llu|%llu|%llu|%d|%llu",
-                             b.id, enemyId, b.shooterSteamID.ConvertToUint64(), damage, timestamp);
-                    SendGameplayMessage(std::string(hitBuffer));
-                }
-            } else if (!game->IsHost()) {
-                uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::system_clock::now().time_since_epoch()).count();
-                char hitBuffer[128];
-                snprintf(hitBuffer, sizeof(hitBuffer), "H|%llu|%llu|%llu|%d|%llu",
-                         b.id, enemyId, game->GetLocalPlayer().steamID.ConvertToUint64(), damage, timestamp);
-                SendGameplayMessage(std::string(hitBuffer));
-
-                if (game->GetEnemies().count(enemyId)) {
-                    Enemy& enemy = game->GetEnemies()[enemyId];
-                    enemy.health -= damage;
-                    if (enemy.health <= 0) {
-                        game->GetEntityManager()->getEnemies().erase(enemyId);
+                    int bytes = snprintf(hitBuffer, sizeof(hitBuffer), "H|%llu|%llu|%llu|%d|%llu",
+                                         b.id, enemyId, game->GetLocalPlayer().steamID.ConvertToUint64(), 
+                                         damage, timestamp);
+                    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(hitBuffer)) {
+                        SendGameplayMessage(std::string(hitBuffer));
+                        std::cout << "[Client] Sent hit message for bullet " << b.id 
+                                  << " on enemy " << enemyId << "\n";
+                    } else {
+                        std::cerr << "[Client] Failed to format hit message for enemy " << enemyId << "\n";
                     }
+                } else {
+                    std::cout << "[Client] Ignored hit on dead enemy " << enemyId << "\n";
                 }
             }
         },
         [&](CSteamID playerId, uint64_t enemyId) {
-            if (game->GetPlayers().count(playerId)) {
+            if (game->GetPlayers().count(playerId) && game->GetEnemies().count(enemyId)) {
                 Player& player = game->GetPlayers()[playerId];
                 if (player.isAlive && game->IsHost()) {
                     player.health -= 10;
+                    std::cout << "[Host] Player " << playerId.ConvertToUint64() 
+                              << " hit by enemy " << enemyId << ", health now " << player.health << "\n";
                     if (player.health <= 0) {
                         player.isAlive = false;
+                        std::cout << "[Host] Player " << playerId.ConvertToUint64() << " died\n";
                     }
                     char buffer[128];
                     int bytes = snprintf(buffer, sizeof(buffer), "P|D|%llu|h|%d|a|%d",
                                          player.steamID.ConvertToUint64(), player.health, player.isAlive ? 1 : 0);
                     if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                         broadcastMessage(std::string(buffer));
+                    } else {
+                        std::cerr << "[Host] Failed to format P|D message for player " 
+                                  << playerId.ConvertToUint64() << "\n";
                     }
                     game->GetPlayers()[playerId] = player;
                     if (playerId == game->GetLocalPlayer().steamID) {
@@ -576,6 +593,7 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
         }
     );
 
+    // Process pending hits (retries for failed hits)
     for (auto it = gameplayState->pendingHits.begin(); it != gameplayState->pendingHits.end();) {
         it->retryTimer -= dt;
         if (it->retryTimer <= 0) {
@@ -584,12 +602,20 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
                     std::chrono::system_clock::now().time_since_epoch()).count();
                 int damage = 10;
                 char hitBuffer[128];
-                snprintf(hitBuffer, sizeof(hitBuffer), "H|%llu|%llu|%llu|%d|%llu",
-                         it->bulletId, it->enemyId, it->shooterSteamID, damage, timestamp);
-                SendGameplayMessage(std::string(hitBuffer));
-                it->retryTimer = 0.5f;
-                ++it;
+                int bytes = snprintf(hitBuffer, sizeof(hitBuffer), "H|%llu|%llu|%llu|%d|%llu",
+                                     it->bulletId, it->enemyId, it->shooterSteamID, damage, timestamp);
+                if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(hitBuffer)) {
+                    SendGameplayMessage(std::string(hitBuffer));
+                    std::cout << "[Client] Retried hit message for bullet " << it->bulletId 
+                              << " on enemy " << it->enemyId << "\n";
+                    it->retryTimer = 0.5f; // Reset retry timer
+                    ++it;
+                } else {
+                    std::cerr << "[Client] Failed to format retry hit message for enemy " << it->enemyId << "\n";
+                    it = gameplayState->pendingHits.erase(it);
+                }
             } else {
+                std::cout << "[Client] Dropped pending hit for removed enemy " << it->enemyId << "\n";
                 it = gameplayState->pendingHits.erase(it);
             }
         } else {
@@ -597,6 +623,7 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
         }
     }
 
+    // Orbiting cube collisions
     for (auto& [playerId, player] : game->GetPlayers()) {
         if (!player.orbitingCube.active || !player.isAlive) continue;
 
@@ -608,12 +635,18 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
                 if (game->GetEntityManager()->collisionGrid.count(key)) {
                     auto& enemyIds = game->GetEntityManager()->collisionGrid[key].enemyIds;
                     for (auto it = enemyIds.begin(); it != enemyIds.end();) {
+                        if (game->GetEnemies().count(*it) == 0) {
+                            it = enemyIds.erase(it);
+                            continue;
+                        }
                         Enemy& enemy = game->GetEnemies()[*it];
                         if (enemy.health > 0 && 
                             player.getOrbitingCubeBounds().intersects(enemy.getBounds())) {
                             int damage = 10;
                             if (game->IsHost()) {
                                 enemy.health -= damage;
+                                std::cout << "[Host] Enemy " << *it << " hit by orbiting cube of player " 
+                                          << playerId.ConvertToUint64() << ", health now " << enemy.health << "\n";
                                 if (enemy.health <= 0) {
                                     player.kills += 1;
                                     player.money += 10;
@@ -623,22 +656,25 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
                                     }
 
                                     char buffer[128];
-                                    int bytes = snprintf(buffer, sizeof(buffer), 
-                                                         "P|D|%llu|k|%d|m|%d",
-                                                         player.steamID.ConvertToUint64(), 
-                                                         player.kills, player.money);
+                                    int bytes = snprintf(buffer, sizeof(buffer), "P|D|%llu|k|%d|m|%d",
+                                                         player.steamID.ConvertToUint64(), player.kills, player.money);
                                     if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                                         broadcastMessage(std::string(buffer));
+                                    } else {
+                                        std::cerr << "[Host] Failed to format P|D message for player " 
+                                                  << playerId.ConvertToUint64() << "\n";
                                     }
 
-                                    bytes = snprintf(buffer, sizeof(buffer), 
-                                                     "E|REMOVE|%llu", *it);
+                                    bytes = snprintf(buffer, sizeof(buffer), "E|REMOVE|%llu", *it);
                                     if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                                         broadcastMessage(std::string(buffer));
+                                        game->GetEntityManager()->getEnemies().erase(*it);
+                                        std::cout << "[Host] Removed enemy " << *it << " due to orbiting cube\n";
+                                        it = enemyIds.erase(it);
+                                    } else {
+                                        std::cerr << "[Host] Failed to format E|REMOVE message for enemy " << *it << "\n";
+                                        ++it;
                                     }
-
-                                    game->GetEntityManager()->getEnemies().erase(*it);
-                                    it = enemyIds.erase(it);
                                 } else {
                                     ++it;
                                 }
@@ -646,17 +682,14 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
                                 uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
                                     std::chrono::system_clock::now().time_since_epoch()).count();
                                 char hitBuffer[128];
-                                snprintf(hitBuffer, sizeof(hitBuffer), 
-                                         "H|%llu|%llu|%llu|%d|%llu",
-                                         0ULL, *it, player.steamID.ConvertToUint64(), damage, timestamp);
-                                SendGameplayMessage(std::string(hitBuffer));
-
-                                if (enemy.health <= damage) {
-                                    
-                                    game->GetEntityManager()->getEnemies().erase(*it);
-                                    it = enemyIds.erase(it);
+                                int bytes = snprintf(hitBuffer, sizeof(hitBuffer), "H|%llu|%llu|%llu|%d|%llu",
+                                                     0ULL, *it, player.steamID.ConvertToUint64(), damage, timestamp);
+                                if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(hitBuffer)) {
+                                    SendGameplayMessage(std::string(hitBuffer));
+                                    std::cout << "[Client] Sent hit message for orbiting cube on enemy " << *it << "\n";
+                                    ++it;
                                 } else {
-                                    enemy.health -= damage;
+                                    std::cerr << "[Client] Failed to format hit message for enemy " << *it << "\n";
                                     ++it;
                                 }
                             }
@@ -669,8 +702,6 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
         }
     }
 }
-
-
 void NetworkManager::syncTimer(float timerValue) {
     if (!game->m_isHost) return;
     char buffer[64];

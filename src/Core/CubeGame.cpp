@@ -163,7 +163,6 @@ void CubeGame::Run() {
             accumulator -= fixedDt;
         }
         entityManager->applyQueuedUpdates(); // Apply updates after collisions
-        
 
         sf::Event event;
         while (window.pollEvent(event)) {
