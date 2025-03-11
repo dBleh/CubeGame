@@ -269,7 +269,6 @@ void GameplayState::HandleStorePurchase() {
         localPlayer.money -= 50;
         localPlayer.speed += 50.f;
         game->GetPlayers()[localPlayer.steamID] = localPlayer;
-        game->GetNetworkManager()->ThrottledSendPlayerUpdate();
     }
 }
 
