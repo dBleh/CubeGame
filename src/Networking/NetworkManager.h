@@ -15,6 +15,7 @@
 class CubeGame;
 class EntityManager;
 class PlayerNetworkHandler;
+class EnemyNetworkHandler;
 
 class NetworkManager {
 public:
@@ -32,46 +33,33 @@ public:
     const std::unordered_map<CSteamID, bool, CSteamIDHash>& getConnectedClients() const;
     bool AcceptP2PSessionWithUser(CSteamID user);
     void setIsConnectedToHost(bool b);
-    
-    // Message handlers
-    void HandlePlayerLoaded(const std::string& msg);
-    void HandlePlayerUpdate(const std::string& msg);
 
-    void HandleEnemySpawn(const std::string& msg);
-    void HandleEnemyUpdate(const std::string& msg);
-    void HandleEnemyDeath(const std::string& msg);  // Handler for explicit death
-    void HandleEnemySync(const std::string& msg);   // New handler for full enemy sync
     void HandleBulletFire(const std::string& msg, CSteamID sender);
     void HandleHit(const std::string& msg, CSteamID sender);
-    void HandleStart(const std::string& msg);
-    void HandleNextLevel(const std::string& msg);
-    void HandleTimer(const std::string& msg);
-    void HandlePlay(const std::string& msg);
-    void HandleGameOver(const std::string& msg);
-    void HandleLobbyReturn(const std::string& msg);
-    
+
     void ReportNetworkUsage() const;
     void ResetNetworkUsage();
-    
+
     // Network/game functions
     void ProcessNetworkMessages(const std::string& msg, CSteamID sender);
     void SendGameplayMessage(const std::string& msg);
     void SendPlayerUpdate();
     void SyncEnemies();
-    void SyncEnemiesFull();                         // New function for full enemy sync
-    void BroadcastEnemySpawns();
+    void SyncEnemiesFull();
     void SpawnEnemiesAndBroadcast();
 
     void BroadcastEnemyDeath(uint64_t enemyId, CSteamID killerID);
-    void HandleEnemyRemove(const std::string& msg);
+
     void HandleCollisionsAndSync(float dt, CubeGame* game);
     void syncTimer(float timerValue);           // Sync next level timer
     void broadcastGameOver();                   // Signal game over
     void syncLevelTransition(float duration);
     void syncEntities(EntityManager* em); // Sync flagged entities
-    PlayerNetworkHandler* playerHandler;   
+    
+    PlayerNetworkHandler* playerHandler;
+    EnemyNetworkHandler* enemyHandler;
+
 private:
-     
     std::map<CSteamID, uint64_t> m_lastPlayerUpdateTime;
     struct NetworkStats {
         size_t bytesSent = 0;
@@ -79,7 +67,7 @@ private:
         size_t messageCountSent = 0;
         size_t messageCountReceived = 0;
     };
-    
+
     struct PlayerState {
         float lastX = 0.f;
         float lastY = 0.f;
@@ -88,7 +76,7 @@ private:
         float interpolationTime = 0.f;
         sf::Clock interpolationClock;
     };
-    
+
     sf::Clock m_playerUpdateClock;
     bool isConnectedToHost;
     ISteamNetworking* m_networking;
@@ -103,7 +91,7 @@ private:
     sf::Clock usageClock;
     float usageReportInterval = 10.0f;
     const float INTERPOLATION_TIME = 0.1f;
-    
+
     STEAM_CALLBACK(NetworkManager, OnLobbyCreated, LobbyCreated_t, m_cbLobbyCreated);
     STEAM_CALLBACK(NetworkManager, OnGameLobbyJoinRequested, GameLobbyJoinRequested_t, m_cbGameLobbyJoinRequested);
     STEAM_CALLBACK(NetworkManager, OnLobbyEnter, LobbyEnter_t, m_cbLobbyEnter);
