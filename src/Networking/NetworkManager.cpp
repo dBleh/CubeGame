@@ -336,11 +336,17 @@ void NetworkManager::SyncEnemies() {
     uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
     
-    // Track all active enemies on host
-    std::unordered_set<uint64_t> currentEnemies;
-    for (const auto& [enemyId, enemy] : game->entityManager->getEnemies()) {
-        if (enemy.health > 0) {
-            currentEnemies.insert(enemyId);
+    for (auto it = game->entityManager->getEnemies().begin(); it != game->entityManager->getEnemies().end();) {
+        Enemy& enemy = it->second;
+        if (enemy.health <= 0) {
+            char buffer[64];
+            int bytes = snprintf(buffer, sizeof(buffer), "E|REMOVE|%llu", enemy.id);
+            if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
+                broadcastMessage(std::string(buffer));
+                std::cout << "[Host] Removing enemy " << enemy.id << " with health 0\n";
+            }
+            it = game->entityManager->getEnemies().erase(it);
+        } else {
             char buffer[128];
             int bytes = snprintf(buffer, sizeof(buffer), "E|SPAWN|%llu|%.1f|%.1f|%d|%.2f|%d|%llu",
                                 enemy.id, enemy.x, enemy.y, enemy.health, enemy.spawnDelay,
@@ -349,19 +355,6 @@ void NetworkManager::SyncEnemies() {
                 broadcastMessage(std::string(buffer));
                 m_lastEnemyUpdateTime[enemy.id] = timestamp;
             }
-        }
-    }
-    
-    // Remove enemies that no longer exist
-    for (auto it = m_lastEnemyUpdateTime.begin(); it != m_lastEnemyUpdateTime.end();) {
-        if (!currentEnemies.count(it->first)) {
-            char buffer[64];
-            int bytes = snprintf(buffer, sizeof(buffer), "E|REMOVE|%llu", it->first);
-            if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
-                broadcastMessage(std::string(buffer));
-            }
-            it = m_lastEnemyUpdateTime.erase(it);
-        } else {
             ++it;
         }
     }
@@ -543,23 +536,25 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
                              b.id, enemyId, b.shooterSteamID.ConvertToUint64(), damage, timestamp);
                     SendGameplayMessage(std::string(hitBuffer));
                 }
-            } else if (!game->IsHost()) {
-                uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::system_clock::now().time_since_epoch()).count();
-                char hitBuffer[128];
-                snprintf(hitBuffer, sizeof(hitBuffer), "H|%llu|%llu|%llu|%d|%llu",
-                         b.id, enemyId, game->GetLocalPlayer().steamID.ConvertToUint64(), damage, timestamp);
-                SendGameplayMessage(std::string(hitBuffer));
-                // Remove this block:
-                // if (game->GetEnemies().count(enemyId)) {
-                //     Enemy& enemy = game->GetEnemies()[enemyId];
-                //     enemy.health -= damage;
-                //     if (enemy.health <= 0) {
-                //         game->GetEntityManager()->getEnemies().erase(enemyId);
-                //     }
-                // }
-            }
-        },
+            } else if (game->IsHost()) {
+                game->GetEntityManager()->checkCollisions(
+                    [&](const Bullet& b, uint64_t enemyId) {
+                        if (game->GetEnemies().count(enemyId)) {
+                            Enemy& enemy = game->GetEnemies()[enemyId];
+                            int damage = 10; // Example damage
+                            enemy.health -= damage;
+                            std::cout << "[Host] Enemy " << enemyId << " hit, health now " << enemy.health << "\n";
+                            if (enemy.health <= 0) {
+                                char buffer[64];
+                                int bytes = snprintf(buffer, sizeof(buffer), "E|REMOVE|%llu", enemyId);
+                                if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
+                                    broadcastMessage(std::string(buffer));
+                                    game->GetEntityManager()->getEnemies().erase(enemyId);
+                                    std::cout << "[Host] Removed enemy " << enemyId << "\n";
+                                }
+                            }
+                        }
+                    },
         [&](CSteamID playerId, uint64_t enemyId) {
             if (game->GetPlayers().count(playerId)) {
                 Player& player = game->GetPlayers()[playerId];
