@@ -20,6 +20,7 @@
 //==============================================================================
 #include "../Networking/NetworkManager.h"
 #include "../Networking/PlayerNetworkHandler.h"
+#include "../Networking/EnemyNetworkHandler.h"
 #include "../Entities/EntityManager.h"
 #include "../Utils/Config.h"
 #include "../Entities/Bullet.h"
@@ -48,6 +49,7 @@ public:
     // Allow NetworkManager direct access to private members.
     friend class NetworkManager;
     friend class PlayerNetworkHandler;
+    friend class EnemyNetworkHandler;
 
     // Returns the current GameplayState (if active).
     GameplayState* GetGameplayState();
