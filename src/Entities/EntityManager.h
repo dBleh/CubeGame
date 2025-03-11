@@ -65,7 +65,8 @@ public:
     void spawnEnemies(int enemiesPerWave, const std::unordered_map<CSteamID, Player, CSteamIDHash>& players, uint64_t hostID); ///< Spawns a new wave of enemies.
     void queueUpdate(const EntityUpdate& update);
     void applyQueuedUpdates();
-
+    void queuePendingEnemy(const EntityUpdate& update);
+    void applyPendingEnemies();
     //-------------------------------------------------------------------------
     // Collision Detection
     //-------------------------------------------------------------------------
@@ -100,6 +101,7 @@ private:
     float lastEnemyUpdateTime;                                      ///< Accumulator for enemy updates.
     //std::function<void(const std::string&)> onEnemyUpdate;          ///< Callback for enemy update messages.
     std::queue<EntityUpdate> updateQueue;
+    std::vector<std::pair<uint64_t, Enemy>> pendingEnemies; // Buffer for new enemies
 };
 
 #endif // ENTITYMANAGER_H

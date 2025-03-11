@@ -143,11 +143,8 @@ void CubeGame::Run() {
 
     while (window.isOpen()) {
         networkManager->processCallbacks();
-        networkManager->receiveMessages(); // Single point of receiving
-        networkManager->syncEntities(entityManager); // Sync flagged entities
-        entityManager->applyQueuedUpdates(); // Apply network updates
-
-        
+        networkManager->receiveMessages(); // Queue updates but don’t apply yet
+        networkManager->syncEntities(entityManager); // Flag entities for sync
 
         float frameTime = clock.restart().asSeconds();
         if (frameTime > 0.25f) frameTime = 0.25f;
@@ -157,14 +154,16 @@ void CubeGame::Run() {
             if (m_isHost) {
                 enemySyncTimer += fixedDt;
                 if (enemySyncTimer >= ENEMY_SYNC_INTERVAL) {
-                    networkManager->SyncEnemies(); // Existing periodic sync
+                    networkManager->SyncEnemies();
                     enemySyncTimer = 0.0f;
                 }
             }
             if (shootCooldown > 0) shootCooldown -= fixedDt;
-            if (state) state->Update(fixedDt);
+            if (state) state->Update(fixedDt); // Includes HandleCollisionsAndSync
             accumulator -= fixedDt;
         }
+        entityManager->applyPendingEnemies(); 
+        entityManager->applyQueuedUpdates(); // Apply updates after collisions
 
         sf::Event event;
         while (window.pollEvent(event)) {
