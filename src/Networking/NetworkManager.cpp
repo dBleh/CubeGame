@@ -2,14 +2,13 @@
 #include "../Core/CubeGame.h"
 #include "../States/GameplayState.h"
 #include "PlayerNetworkHandler.h"
+#include "EnemyNetworkHandler.h"
 #include <steam/steam_api.h>
 #include <iostream>
 #include <cstring>
 #include <sstream>
 #include <vector>
 #include <chrono>
-
-
 
 NetworkManager::NetworkManager(bool debugMode, CubeGame* gameInstance)
     : debugMode(debugMode), m_networking(nullptr), isConnectedToHost(false), game(gameInstance),
@@ -40,9 +39,12 @@ NetworkManager::NetworkManager(bool debugMode, CubeGame* gameInstance)
 
     usageClock.restart();
     playerHandler = new PlayerNetworkHandler(gameInstance, this);
+    enemyHandler = new EnemyNetworkHandler(gameInstance);
 }
 
 NetworkManager::~NetworkManager() {
+    delete playerHandler;
+    delete enemyHandler;
     SteamAPI_Shutdown();
 }
 
@@ -152,85 +154,40 @@ void NetworkManager::ProcessNetworkMessages(const std::string& msg, CSteamID sen
 
     if (msg.find("PLAYER_LOADED") == 0) playerHandler->HandlePlayerLoaded(msg);
     else if (msg[0] == 'P') playerHandler->HandlePlayerUpdate(msg);
-    else if (msg.find("E|SPAWN") == 0) HandleEnemySpawn(msg);
-    else if (msg.find("E|UPDATE") == 0) HandleEnemyUpdate(msg);
-    else if (msg.find("E|DEATH") == 0) HandleEnemyDeath(msg);
+    else if (msg.find("E|SPAWN") == 0) enemyHandler->HandleEnemySpawn(msg);
+    else if (msg.find("E|UPDATE") == 0) enemyHandler->HandleEnemyUpdate(msg);
+    else if (msg.find("E|DEATH") == 0) enemyHandler->HandleEnemyDeath(msg);
     else if (msg.find("B|fire") == 0) HandleBulletFire(msg, sender);
     else if (msg[0] == 'H') HandleHit(msg, sender);
-    else if (msg.find("E|REMOVE") == 0) HandleEnemyRemove(msg);
-    else if (msg.find("S|START") == 0) HandleStart(msg);
-    else if (msg.find("S|NEXT") == 0) HandleNextLevel(msg);
-    else if (msg.find("S|TIMER") == 0) HandleTimer(msg);
-    else if (msg.find("S|PLAY") == 0) HandlePlay(msg);
-    else if (msg.find("S|GAMEOVER") == 0) HandleGameOver(msg);
-    else if (msg.find("S|LOBBY") == 0) HandleLobbyReturn(msg);
+    else if (msg.find("E|REMOVE") == 0) enemyHandler->HandleEnemyRemove(msg);
+    else if (msg.find("S|START") == 0) if (game->currentState != GameState::Playing) {
+        game->StartGame();
+        game->currentState = GameState::Playing;
+    }
+    else if (msg.find("S|NEXT") == 0) {
+        float duration;
+        if (sscanf(msg.c_str(), "S|NEXT|%f", &duration) == 1) {
+            auto gameplayState = game->GetGameplayState();
+            if (gameplayState) {
+                gameplayState->StartNextLevelTimer(duration);
+            }
+        }
+    }
+    else if (msg.find("S|TIMER") == 0) {
+        float timerValue;
+        if (sscanf(msg.c_str(), "S|TIMER|%f", &timerValue) == 1) {
+            auto gameplayState = game->GetGameplayState();
+            if (gameplayState) {
+                gameplayState->nextLevelTimer = timerValue;
+                gameplayState->timerActive = (timerValue > 0);
+            }
+        }
+    }
+    else if (msg.find("S|PLAY") == 0) game->currentState = GameState::Playing;
+    else if (msg.find("S|GAMEOVER") == 0) game->currentState = GameState::GameOver;
+    else if (msg.find("S|LOBBY") == 0) game->ReturnToLobby();
     else {
         std::cout << "[NetworkManager] Unhandled message: " << msg << std::endl;
-    }
-}
-
-
-
-void NetworkManager::HandleEnemySpawn(const std::string& msg) {
-    uint64_t enemyID, timestamp;
-    float x, y, spawnDelay;
-    int health, type;
-    int parsed = sscanf(msg.c_str(), "E|SPAWN|%llu|%f|%f|%d|%f|%d|%llu",
-                        &enemyID, &x, &y, &health, &spawnDelay, &type, &timestamp);
-    if (parsed == 7) {
-        if (!m_lastEnemyUpdateTime.count(enemyID) || m_lastEnemyUpdateTime[enemyID] < timestamp) {
-            EntityUpdate update;
-            update.type = EntityUpdate::Type::Spawn;
-            update.id = enemyID;
-            update.x = x;
-            update.y = y;
-            update.health = health;
-            update.spawnDelay = spawnDelay;
-            update.enemyType = static_cast<Enemy::Type>(type);
-            update.timestamp = timestamp;
-            game->entityManager->queueUpdate(update);
-            m_lastEnemyUpdateTime[enemyID] = timestamp;
-        }
-    }
-}
-
-void NetworkManager::HandleEnemyUpdate(const std::string& msg) {
-    uint64_t enemyID, timestamp;
-    float x, y, spawnDelay;
-    int health;
-    if (sscanf(msg.c_str(), "E|UPDATE|%llu|%f|%f|%d|%f|%llu", &enemyID, &x, &y, &health, &spawnDelay, &timestamp) == 6) {
-        if (!m_lastEnemyUpdateTime.count(enemyID) || m_lastEnemyUpdateTime[enemyID] < timestamp) {
-            EntityUpdate update;
-            update.type = EntityUpdate::Type::Update;
-            update.id = enemyID;
-            update.x = x;
-            update.y = y;
-            update.health = health;
-            update.spawnDelay = spawnDelay;
-            update.timestamp = timestamp;
-            game->entityManager->queueUpdate(update);
-            m_lastEnemyUpdateTime[enemyID] = timestamp;
-        }
-    }
-}
-
-void NetworkManager::HandleEnemyRemove(const std::string& msg) {
-    uint64_t enemyID;
-    if (sscanf(msg.c_str(), "E|REMOVE|%llu", &enemyID) == 1) {
-        EntityUpdate update;
-        update.type = EntityUpdate::Type::Remove;
-        update.id = enemyID;
-        game->entityManager->queueUpdate(update);
-    }
-}
-void NetworkManager::HandleEnemyDeath(const std::string& msg) {
-    uint64_t enemyID, timestamp, killerID;
-    if (sscanf(msg.c_str(), "E|DEATH|%llu|%llu|%llu", &enemyID, &timestamp, &killerID) == 3) {
-        if (!m_lastEnemyUpdateTime.count(enemyID) || m_lastEnemyUpdateTime[enemyID] < timestamp) {
-            game->entityManager->getEnemies().erase(enemyID);
-            m_lastEnemyUpdateTime[enemyID] = timestamp;
-           
-        }
     }
 }
 
@@ -267,14 +224,11 @@ void NetworkManager::HandleHit(const std::string& msg, CSteamID sender) {
     uint64_t bulletId, enemyId, shooterSteamID, timestamp;
     int damage;
     if (sscanf(msg.c_str(), "H|%llu|%llu|%llu|%d|%llu", &bulletId, &enemyId, &shooterSteamID, &damage, &timestamp) != 5) {
-
         return;
     }
     if (game->m_isHost) {
-        
         if (game->entityManager->getEnemies().count(enemyId)) {
             Enemy& e = game->entityManager->getEnemies()[enemyId];
-            // Only process if this is a new hit or a later timestamp
             if (!m_lastEnemyUpdateTime.count(enemyId) || m_lastEnemyUpdateTime[enemyId] < timestamp) {
                 e.health -= damage;
                 m_lastEnemyUpdateTime[enemyId] = timestamp;
@@ -282,76 +236,29 @@ void NetworkManager::HandleHit(const std::string& msg, CSteamID sender) {
                     CSteamID shooterID(shooterSteamID);
                     if (game->entityManager->getPlayers().count(shooterID)) {
                         Player& shooter = game->entityManager->getPlayers()[shooterID];
-                       
                         shooter.kills += 1;
                         shooter.money += 10;
-
-                        // Save updated player back to the map
                         game->entityManager->getPlayers()[shooterID] = shooter;
 
-                        // Broadcast kill/money update
                         char buffer[128];
                         int bytes = snprintf(buffer, sizeof(buffer), "P|D|%llu|k|%d|m|%d",
                                              shooterSteamID, shooter.kills, shooter.money);
                         if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                             broadcastMessage(std::string(buffer));
-                            
                         }
 
-                        // Broadcast enemy removal
                         bytes = snprintf(buffer, sizeof(buffer), "E|REMOVE|%llu", enemyId);
                         if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                             broadcastMessage(std::string(buffer));
                         }
 
-                        // Remove enemy and clear timestamp to allow new enemies with same ID
                         game->entityManager->getEnemies().erase(enemyId);
                         m_lastEnemyUpdateTime.erase(enemyId);
-                        
-                    } 
+                    }
                 }
-            } 
+            }
         }
     }
-}
-void NetworkManager::HandleStart(const std::string& msg) {
-    if (game->currentState != GameState::Playing) {
-        game->StartGame();
-        game->currentState = GameState::Playing;
-    }
-}
-
-void NetworkManager::HandleNextLevel(const std::string& msg) {
-    float duration;
-    if (sscanf(msg.c_str(), "S|NEXT|%f", &duration) == 1) {
-        auto gameplayState = game->GetGameplayState();
-        if (gameplayState) {
-            gameplayState->StartNextLevelTimer(duration);
-        }
-    }
-}
-
-void NetworkManager::HandleTimer(const std::string& msg) {
-    float timerValue;
-    if (sscanf(msg.c_str(), "S|TIMER|%f", &timerValue) == 1) {
-        auto gameplayState = game->GetGameplayState();
-        if (gameplayState) {
-            gameplayState->nextLevelTimer = timerValue;
-            gameplayState->timerActive = (timerValue > 0);
-        }
-    }
-}
-
-void NetworkManager::HandlePlay(const std::string& msg) {
-    game->currentState = GameState::Playing;
-}
-
-void NetworkManager::HandleGameOver(const std::string& msg) {
-    game->currentState = GameState::GameOver;
-}
-
-void NetworkManager::HandleLobbyReturn(const std::string& msg) {
-    game->ReturnToLobby();
 }
 
 void NetworkManager::ReportNetworkUsage() const {
@@ -402,8 +309,6 @@ void NetworkManager::SendGameplayMessage(const std::string& msg) {
     }
 }
 
-
-
 void NetworkManager::SpawnEnemiesAndBroadcast() {
     if (!game->m_isHost) return;
 
@@ -428,6 +333,7 @@ void NetworkManager::SpawnEnemiesAndBroadcast() {
         }
     }
 }
+
 void NetworkManager::SyncEnemies() {
     if (!game->m_isHost) return;
     
@@ -595,13 +501,10 @@ void NetworkManager::OnLobbyMatchList(LobbyMatchList_t* pParam) {
     game->hud.updateText("searchStatus", "Lobby Search");
 }
 
-
 void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
-    // Access GameplayState for pendingHits and other state if needed
     GameplayState* gameplayState = game->GetGameplayState();
     if (!gameplayState) return;
 
-    // Collision handling
     game->GetEntityManager()->checkCollisions(
         [&](const Bullet& b, uint64_t enemyId) {
             int damage = 10;
@@ -614,7 +517,7 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
                         Player& shooter = game->GetLocalPlayer();
                         shooter.kills += 1;
                         shooter.money += 10;
-                        game->GetLocalPlayer() = shooter; // Update local player
+                        game->GetLocalPlayer() = shooter;
 
                         char buffer[128];
                         int bytes = snprintf(buffer, sizeof(buffer), "P|D|%llu|k|%d|m|%d",
@@ -675,7 +578,6 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
         }
     );
 
-    // Process pending hits
     for (auto it = gameplayState->pendingHits.begin(); it != gameplayState->pendingHits.end();) {
         it->retryTimer -= dt;
         if (it->retryTimer <= 0) {
@@ -697,7 +599,6 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
         }
     }
 
-    // Handle orbiting cube collisions
     for (auto& [playerId, player] : game->GetPlayers()) {
         if (!player.orbitingCube.active || !player.isAlive) continue;
 
@@ -743,7 +644,7 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
                                 } else {
                                     ++it;
                                 }
-                            } else { // Client
+                            } else {
                                 uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
                                     std::chrono::system_clock::now().time_since_epoch()).count();
                                 char hitBuffer[128];
@@ -752,11 +653,11 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
                                          0ULL, *it, player.steamID.ConvertToUint64(), damage, timestamp);
                                 SendGameplayMessage(std::string(hitBuffer));
 
-                                if (enemy.health <= damage) { // Optimistic removal on client
+                                if (enemy.health <= damage) {
                                     game->GetEntityManager()->getEnemies().erase(*it);
                                     it = enemyIds.erase(it);
                                 } else {
-                                    enemy.health -= damage; // Local prediction
+                                    enemy.health -= damage;
                                     ++it;
                                 }
                             }
