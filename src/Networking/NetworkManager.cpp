@@ -326,6 +326,7 @@ void NetworkManager::SpawnEnemiesAndBroadcast() {
         if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
             broadcastMessage(std::string(buffer));
             m_lastEnemyUpdateTime[enemy.id] = timestamp;
+            std::cout << "[Host] Broadcasted spawn: " << buffer << std::endl; // Debug log
         }
     }
 }
@@ -543,14 +544,7 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
                 snprintf(hitBuffer, sizeof(hitBuffer), "H|%llu|%llu|%llu|%d|%llu",
                          b.id, enemyId, game->GetLocalPlayer().steamID.ConvertToUint64(), damage, timestamp);
                 SendGameplayMessage(std::string(hitBuffer));
-
-                if (game->GetEnemies().count(enemyId)) {
-                    Enemy& enemy = game->GetEnemies()[enemyId];
-                    enemy.health -= damage;
-                    if (enemy.health <= 0) {
-                        game->GetEntityManager()->getEnemies().erase(enemyId);
-                    }
-                }
+                // No local enemy removal here; wait for host confirmation
             }
         },
         [&](CSteamID playerId, uint64_t enemyId) {
@@ -650,30 +644,8 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
                                          "H|%llu|%llu|%llu|%d|%llu",
                                          0ULL, *it, player.steamID.ConvertToUint64(), damage, timestamp);
                                 SendGameplayMessage(std::string(hitBuffer));
-
-                                if (enemy.health <= damage) {
-
-                                    char buffer[128];
-                                    int bytes = snprintf(buffer, sizeof(buffer), 
-                                                         "P|D|%llu|k|%d|m|%d",
-                                                         player.steamID.ConvertToUint64(), 
-                                                         player.kills, player.money);
-                                    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
-                                        broadcastMessage(std::string(buffer));
-                                    }
-
-                                    bytes = snprintf(buffer, sizeof(buffer), 
-                                                     "E|REMOVE|%llu", *it);
-                                    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
-                                        broadcastMessage(std::string(buffer));
-                                    }
-
-                                    game->GetEntityManager()->getEnemies().erase(*it);
-                                    it = enemyIds.erase(it);
-                                } else {
-                                    enemy.health -= damage;
-                                    ++it;
-                                }
+                                // No local removal; wait for host
+                                ++it;
                             }
                         } else {
                             ++it;
