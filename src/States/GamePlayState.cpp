@@ -82,6 +82,53 @@ void GameplayState::Interpolate(float alpha) {
     game->GetEntityManager()->interpolateEntities(alpha, game); // Pass alpha instead of dt
 }
 
+void GameplayState::UpdatePlayingState(float dt) {
+    UpdateCamera(dt);
+
+    Player& localPlayer = game->GetLocalPlayer();
+    if (localPlayer.isAlive) {
+        bool playerMoved = localPlayer.move(dt);
+        localPlayer.updateOrbitingCube(dt);
+        if (playerMoved) {
+            localPlayer.renderedX = localPlayer.x;
+            localPlayer.renderedY = localPlayer.y;
+            localPlayer.shape.setPosition(localPlayer.renderedX, localPlayer.renderedY);
+            game->GetNetworkManager()->ThrottledSendPlayerUpdate();
+        }
+        if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
+            Player& updatedLocalPlayer = game->GetLocalPlayer();
+            if (updatedLocalPlayer.isAlive) {
+                updatedLocalPlayer.ShootBullet(game);
+            }
+        }
+    }
+
+    game->GetNetworkManager()->HandleCollisionsAndSync(dt, game);
+}
+
+void GameplayState::ProcessEvent(const sf::Event& event) {
+    if (event.type == sf::Event::KeyPressed) {
+        if (event.key.code == sf::Keyboard::Escape) {
+            menuVisible = !menuVisible;
+        } else if (menuVisible && event.key.code == sf::Keyboard::M) {
+            game->ReturnToMainMenu();
+        } else if (event.key.code == sf::Keyboard::B) {
+            shopOpen = !shopOpen;
+        }
+    }
+
+    if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
+        if (shopOpen) {
+            HandleStorePurchase();
+        } else if (game->GetCurrentState() == GameState::Playing && game->GetLocalPlayer().isAlive && !menuVisible) {
+            game->GetLocalPlayer().ShootBullet(game);  
+        }
+    }
+}
+
+
+
+
 //---------------------------------------------------------
 // Level & Timer Helpers
 //---------------------------------------------------------
@@ -109,51 +156,12 @@ void GameplayState::StartNextLevelTimer(float duration) {
 // Update Playing State
 //---------------------------------------------------------
 
-void GameplayState::UpdatePlayingState(float dt) {
-    UpdateCamera(dt);
 
-    Player& localPlayer = game->GetLocalPlayer();
-    if (localPlayer.isAlive) {
-        localPlayer.move(dt); // Always update movement
-        localPlayer.updateOrbitingCube(dt);
-        localPlayer.renderedX = localPlayer.x;
-        localPlayer.renderedY = localPlayer.y;
-        localPlayer.shape.setPosition(localPlayer.renderedX, localPlayer.renderedY);
-        //game->GetNetworkManager()->ThrottledSendPlayerUpdate(); // Always send update
-
-        if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
-            Player& updatedLocalPlayer = game->GetLocalPlayer();
-            if (updatedLocalPlayer.isAlive) {
-                updatedLocalPlayer.ShootBullet(game);
-            }
-        }
-    }
-
-    game->GetNetworkManager()->HandleCollisionsAndSync(dt, game);
-}
 
 //---------------------------------------------------------
 // Process Event
 //---------------------------------------------------------
-void GameplayState::ProcessEvent(const sf::Event& event) {
-    if (event.type == sf::Event::KeyPressed) {
-        if (event.key.code == sf::Keyboard::Escape) {
-            menuVisible = !menuVisible;
-        } else if (menuVisible && event.key.code == sf::Keyboard::M) {
-            game->ReturnToMainMenu();
-        } else if (event.key.code == sf::Keyboard::B) {
-            shopOpen = !shopOpen;
-        }
-    }
 
-    if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
-        if (shopOpen) {
-            HandleStorePurchase();
-        } else if (game->GetCurrentState() == GameState::Playing && game->GetLocalPlayer().isAlive && !menuVisible) {
-            game->GetLocalPlayer().ShootBullet(game);  
-        }
-    }
-}
 
 //---------------------------------------------------------
 // Camera Update
