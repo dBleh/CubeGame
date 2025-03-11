@@ -290,8 +290,6 @@ void EntityManager::checkCollisions(
     std::function<void(CSteamID playerId, uint64_t enemyId)> onEnemyPlayerCollision
 ) {
     updateCollisionGrid();
-    auto enemiesSnapshot = m_enemies; // Copy for stability
-
     for (auto bulletIt = m_bullets.begin(); bulletIt != m_bullets.end();) {
         bool bulletHit = false;
         int bx = int(bulletIt->second.renderedX / 100.f);
@@ -302,8 +300,11 @@ void EntityManager::checkCollisions(
                 if (collisionGrid.count(key)) {
                     const GridCell& cell = collisionGrid[key];
                     for (uint64_t enemyId : cell.enemyIds) {
-                        if (enemiesSnapshot.count(enemyId) == 0) continue; // Skip if removed
-                        Enemy& enemy = enemiesSnapshot[enemyId];
+                        if (m_enemies.count(enemyId) == 0) {
+                            std::cout << "[Client] Skipping collision with missing enemy " << enemyId << "\n";
+                            continue;
+                        }
+                        Enemy& enemy = m_enemies[enemyId];
                         if (enemy.health > 0 && 
                             bulletIt->second.shape.getGlobalBounds().intersects(enemy.getBounds())) {
                             onBulletEnemyCollision(bulletIt->second, enemyId);

@@ -162,7 +162,6 @@ void CubeGame::Run() {
             if (state) state->Update(fixedDt); // Includes HandleCollisionsAndSync
             accumulator -= fixedDt;
         }
-        entityManager->applyPendingEnemies(); 
         entityManager->applyQueuedUpdates(); // Apply updates after collisions
 
         sf::Event event;
