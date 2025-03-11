@@ -293,10 +293,6 @@ void NetworkManager::ResetNetworkUsage() {
     networkUsage.clear();
 }
 
-void NetworkManager::SendPlayerUpdate() {
-    playerHandler->SendPlayerUpdate();
-}
-
 void NetworkManager::SendGameplayMessage(const std::string& msg) {
     if (game->m_isHost) {
         broadcastMessage(msg);
