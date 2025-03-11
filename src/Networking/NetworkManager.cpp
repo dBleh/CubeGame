@@ -148,7 +148,17 @@ bool NetworkManager::isLoaded() {
 void NetworkManager::setIsConnectedToHost(bool b) {
     isConnectedToHost = b;
 }
-
+void NetworkManager::Update(float dt) {
+    static float syncTimer = 0;
+    syncTimer += dt;
+    if (syncTimer >= 5.0f) { // Sync every 5 seconds
+        SyncEnemiesFull();
+        syncTimer = 0;
+        std::cout << "[Host] Performed full enemy sync" << std::endl; // Debug log
+    }
+    processCallbacks(); // Ensure callbacks are processed regularly
+    receiveMessages();  // Ensure messages are received regularly
+}
 void NetworkManager::ProcessNetworkMessages(const std::string& msg, CSteamID sender) {
     if (msg.empty()) return;
 
