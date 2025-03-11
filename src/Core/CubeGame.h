@@ -164,7 +164,8 @@ public:
     // Game Identifier Constant
     //--------------------------------------------------------------------------
     static const char* GAME_ID;
-    
+    EntityManager* entityManager = nullptr;
+    CSteamID localSteamID;
 private:
     //--------------------------------------------------------------------------
     // Game Timing & State Variables
@@ -205,14 +206,13 @@ private:
     //--------------------------------------------------------------------------
     // Local Player & Processed Messages
     //--------------------------------------------------------------------------
-    CSteamID localSteamID;
+    
     std::unordered_set<uint32_t> processedBulletMessages; // Tracks processed bullet messages.
 
     //--------------------------------------------------------------------------
     // Manager Pointers
     //--------------------------------------------------------------------------
     NetworkManager* networkManager = nullptr;
-    EntityManager* entityManager = nullptr;
     std::unique_ptr<EntityManager> entityManagerPtr;
     //--------------------------------------------------------------------------
     // Private Helper Methods
