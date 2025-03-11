@@ -290,8 +290,10 @@ void GameplayState::updateEnemyVertices() {
     enemyVertices.resize(game->GetEnemies().size() * 4);
     size_t i = 0;
     for (const auto& [id, enemy] : game->GetEnemies()) {
-        if (enemy.health <= 0 || std::isnan(enemy.renderedX) || std::isnan(enemy.renderedY))
+        if (enemy.health <= 0 || std::isnan(enemy.renderedX) || std::isnan(enemy.renderedY)) {
+            std::cout << "[Client] Skipping enemy " << id << " with health " << enemy.health << "\n";
             continue;
+        }
         float x = enemy.renderedX;
         float y = enemy.renderedY;
         if (enemy.isSplitting && enemy.shakeTimer > 0) {

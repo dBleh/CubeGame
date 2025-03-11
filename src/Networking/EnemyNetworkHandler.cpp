@@ -31,24 +31,20 @@ void EnemyNetworkHandler::HandleEnemySpawn(const std::string& msg) {
 void EnemyNetworkHandler::HandleEnemyUpdate(const std::string& msg) {
     uint64_t enemyID, timestamp;
     float x, y, spawnDelay;
-    int health;
-    if (sscanf(msg.c_str(), "E|UPDATE|%llu|%f|%f|%d|%f|%llu", &enemyID, &x, &y, &health, &spawnDelay, &timestamp) == 6) {
+    int health, type;
+    if (sscanf(msg.c_str(), "E|UPDATE|%llu|%f|%f|%d|%f|%d|%llu", &enemyID, &x, &y, &health, &spawnDelay, &type, &timestamp) == 7) {
         if (!game->networkManager->m_lastEnemyUpdateTime.count(enemyID) || 
             game->networkManager->m_lastEnemyUpdateTime[enemyID] < timestamp) {
             EntityUpdate update;
-            update.type = (game->entityManager->getEnemies().count(enemyID) > 0) 
-                        ? EntityUpdate::Type::Update 
-                        : EntityUpdate::Type::Spawn; // Treat as spawn if missing
+            bool exists = game->entityManager->getEnemies().count(enemyID) > 0;
+            update.type = exists ? EntityUpdate::Type::Update : EntityUpdate::Type::Spawn;
             update.id = enemyID;
             update.x = x;
             update.y = y;
             update.health = health;
             update.spawnDelay = spawnDelay;
+            update.enemyType = static_cast<Enemy::Type>(type);
             update.timestamp = timestamp;
-            // Assume default type if spawning (could improve with type in message)
-            if (update.type == EntityUpdate::Type::Spawn) {
-                update.enemyType = Enemy::Default; // Adjust as needed
-            }
             game->entityManager->queueUpdate(update);
             game->networkManager->m_lastEnemyUpdateTime[enemyID] = timestamp;
         }

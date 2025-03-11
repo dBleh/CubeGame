@@ -80,15 +80,15 @@ void EntityManager::updateEntities(float dt) {
                             static uint64_t splitCounter = 0;
                             uint64_t newId = enemy.id + (splitCounter << 32) + 1;
                             splitCounter++;
-
+                        
                             enemy.size *= 0.7f;
                             enemy.health /= 2;
                             enemy.splitCount++;
                             enemy.splitTimer = enemy.splitInterval;
                             enemy.isSplitting = false;
                             enemy.shouldStopMoving = false;
-                            enemy.needsSync = true; // Flag for sync
-
+                            enemy.needsSync = true;
+                        
                             auto& newEnemy = m_enemies.emplace(newId, Enemy()).first->second;
                             newEnemy.initialize(Enemy::Splitter);
                             newEnemy.health = enemy.health;
@@ -104,9 +104,19 @@ void EntityManager::updateEntities(float dt) {
                             newEnemy.lastSentY = newEnemy.y;
                             newEnemy.interpolationTime = 0.f;
                             newEnemy.spawnDelay = 0.1f;
-                            newEnemy.needsSync = true; // Flag new enemy
-
-                            std::cout << "Splitter " << enemy.id << " split at (" << enemy.renderedX << ", " << enemy.renderedY << ")\n";
+                            newEnemy.needsSync = true;
+                        
+                            if (game->IsHost()) {
+                                uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    std::chrono::system_clock::now().time_since_epoch()).count();
+                                char buffer[128];
+                                int bytes = snprintf(buffer, sizeof(buffer), "E|SPAWN|%llu|%.1f|%.1f|%d|%.2f|%d|%llu",
+                                                     newId, newEnemy.x, newEnemy.y, newEnemy.health, newEnemy.spawnDelay,
+                                                     static_cast<int>(newEnemy.type), timestamp);
+                                if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
+                                    game->GetNetworkManager()->broadcastMessage(std::string(buffer));
+                                }
+                            }
                         }
 
                         float minDist = std::numeric_limits<float>::max();
@@ -406,7 +416,7 @@ void EntityManager::applyQueuedUpdates() {
                     newEnemy.lastY = update.y;
                 }
                 break;
-            case EntityUpdate::Type::Update:
+                case EntityUpdate::Type::Update:
                 if (m_enemies.count(update.id) > 0) {
                     Enemy& e = m_enemies[update.id];
                     e.lastX = e.renderedX;
@@ -415,6 +425,7 @@ void EntityManager::applyQueuedUpdates() {
                     e.y = update.y;
                     e.health = update.health;
                     e.spawnDelay = update.spawnDelay;
+                    e.type = update.enemyType; // Update type
                     e.interpolationTime = INTERPOLATION_TIME;
                 }
                 break;

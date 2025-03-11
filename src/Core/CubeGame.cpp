@@ -147,6 +147,8 @@ void CubeGame::Run() {
         networkManager->syncEntities(entityManager); // Sync flagged entities
         entityManager->applyQueuedUpdates(); // Apply network updates
 
+        
+
         float frameTime = clock.restart().asSeconds();
         if (frameTime > 0.25f) frameTime = 0.25f;
         accumulator += frameTime;
