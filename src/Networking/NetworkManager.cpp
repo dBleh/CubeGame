@@ -148,17 +148,7 @@ bool NetworkManager::isLoaded() {
 void NetworkManager::setIsConnectedToHost(bool b) {
     isConnectedToHost = b;
 }
-void NetworkManager::Update(float dt) {
-    static float syncTimer = 0;
-    syncTimer += dt;
-    if (syncTimer >= 5.0f) { // Sync every 5 seconds
-        SyncEnemiesFull();
-        syncTimer = 0;
-        std::cout << "[Host] Performed full enemy sync" << std::endl; // Debug log
-    }
-    processCallbacks(); // Ensure callbacks are processed regularly
-    receiveMessages();  // Ensure messages are received regularly
-}
+
 void NetworkManager::ProcessNetworkMessages(const std::string& msg, CSteamID sender) {
     if (msg.empty()) return;
 
@@ -336,7 +326,6 @@ void NetworkManager::SpawnEnemiesAndBroadcast() {
         if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
             broadcastMessage(std::string(buffer));
             m_lastEnemyUpdateTime[enemy.id] = timestamp;
-            std::cout << "[Host] Broadcasted spawn: " << buffer << std::endl; // Debug log
         }
     }
 }
@@ -554,7 +543,14 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
                 snprintf(hitBuffer, sizeof(hitBuffer), "H|%llu|%llu|%llu|%d|%llu",
                          b.id, enemyId, game->GetLocalPlayer().steamID.ConvertToUint64(), damage, timestamp);
                 SendGameplayMessage(std::string(hitBuffer));
-                // No local enemy removal here; wait for host confirmation
+
+                if (game->GetEnemies().count(enemyId)) {
+                    Enemy& enemy = game->GetEnemies()[enemyId];
+                    enemy.health -= damage;
+                    if (enemy.health <= 0) {
+                        game->GetEntityManager()->getEnemies().erase(enemyId);
+                    }
+                }
             }
         },
         [&](CSteamID playerId, uint64_t enemyId) {
@@ -654,8 +650,15 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
                                          "H|%llu|%llu|%llu|%d|%llu",
                                          0ULL, *it, player.steamID.ConvertToUint64(), damage, timestamp);
                                 SendGameplayMessage(std::string(hitBuffer));
-                                // No local removal; wait for host
-                                ++it;
+
+                                if (enemy.health <= damage) {
+                                    
+                                    game->GetEntityManager()->getEnemies().erase(*it);
+                                    it = enemyIds.erase(it);
+                                } else {
+                                    enemy.health -= damage;
+                                    ++it;
+                                }
                             }
                         } else {
                             ++it;
