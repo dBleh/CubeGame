@@ -290,6 +290,7 @@ void EntityManager::checkCollisions(
     std::function<void(CSteamID playerId, uint64_t enemyId)> onEnemyPlayerCollision
 ) {
     updateCollisionGrid();
+    auto enemiesSnapshot = m_enemies; // Copy for stability
 
     for (auto bulletIt = m_bullets.begin(); bulletIt != m_bullets.end();) {
         bool bulletHit = false;
@@ -301,7 +302,8 @@ void EntityManager::checkCollisions(
                 if (collisionGrid.count(key)) {
                     const GridCell& cell = collisionGrid[key];
                     for (uint64_t enemyId : cell.enemyIds) {
-                        Enemy& enemy = m_enemies[enemyId];
+                        if (enemiesSnapshot.count(enemyId) == 0) continue; // Skip if removed
+                        Enemy& enemy = enemiesSnapshot[enemyId];
                         if (enemy.health > 0 && 
                             bulletIt->second.shape.getGlobalBounds().intersects(enemy.getBounds())) {
                             onBulletEnemyCollision(bulletIt->second, enemyId);
@@ -402,21 +404,9 @@ void EntityManager::applyQueuedUpdates() {
         const EntityUpdate& update = updateQueue.front();
         switch (update.type) {
             case EntityUpdate::Type::Spawn:
-                if (m_enemies.count(update.id) == 0) {
-                    auto& newEnemy = m_enemies.emplace(update.id, Enemy()).first->second;
-                    newEnemy.initialize(update.enemyType);
-                    newEnemy.id = update.id;
-                    newEnemy.x = update.x;
-                    newEnemy.y = update.y;
-                    newEnemy.health = update.health;
-                    newEnemy.spawnDelay = update.spawnDelay;
-                    newEnemy.renderedX = update.x;
-                    newEnemy.renderedY = update.y;
-                    newEnemy.lastX = update.x;
-                    newEnemy.lastY = update.y;
-                }
+                queuePendingEnemy(update); // Buffer instead of direct insert
                 break;
-                case EntityUpdate::Type::Update:
+            case EntityUpdate::Type::Update:
                 if (m_enemies.count(update.id) > 0) {
                     Enemy& e = m_enemies[update.id];
                     e.lastX = e.renderedX;
@@ -425,7 +415,7 @@ void EntityManager::applyQueuedUpdates() {
                     e.y = update.y;
                     e.health = update.health;
                     e.spawnDelay = update.spawnDelay;
-                    e.type = update.enemyType; // Update type
+                    e.type = update.enemyType;
                     e.interpolationTime = INTERPOLATION_TIME;
                 }
                 break;
@@ -435,4 +425,28 @@ void EntityManager::applyQueuedUpdates() {
         }
         updateQueue.pop();
     }
+}
+
+void EntityManager::queuePendingEnemy(const EntityUpdate& update) {
+    if (update.type == EntityUpdate::Type::Spawn && m_enemies.count(update.id) == 0) {
+        Enemy newEnemy;
+        newEnemy.initialize(update.enemyType);
+        newEnemy.id = update.id;
+        newEnemy.x = update.x;
+        newEnemy.y = update.y;
+        newEnemy.health = update.health;
+        newEnemy.spawnDelay = update.spawnDelay;
+        newEnemy.renderedX = update.x;
+        newEnemy.renderedY = update.y;
+        newEnemy.lastX = update.x;
+        newEnemy.lastY = update.y;
+        pendingEnemies.emplace_back(update.id, newEnemy);
+    }
+}
+
+void EntityManager::applyPendingEnemies() {
+    for (auto& [id, enemy] : pendingEnemies) {
+        m_enemies.emplace(id, std::move(enemy));
+    }
+    pendingEnemies.clear();
 }
