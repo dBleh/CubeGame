@@ -19,6 +19,7 @@ class EnemyNetworkHandler;
 
 class NetworkManager {
 public:
+    friend class EnemyNetworkHandler;
     NetworkManager(bool debugMode = false, CubeGame* gameInstance = nullptr);
     ~NetworkManager();
     void JoinLobbyFromNetwork(CSteamID lobby);
