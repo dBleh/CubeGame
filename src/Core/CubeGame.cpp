@@ -74,6 +74,7 @@ std::string CubeGame::FormatPlayerUpdate(const Player& p) {
 CubeGame::CubeGame() : hud(font) {
     networkManager = new NetworkManager(debugMode, this);
     entityManager = new EntityManager();
+    playerNetworkHandler = new PlayerNetworkHandler(this, networkManager);
 
     if (!debugMode) {
         if (!SteamAPI_Init()) {

@@ -19,6 +19,7 @@
 // Project Includes
 //==============================================================================
 #include "../Networking/NetworkManager.h"
+#include "../Networking/PlayerNetworkHandler.h"
 #include "../Entities/EntityManager.h"
 #include "../Utils/Config.h"
 #include "../Entities/Bullet.h"
@@ -46,6 +47,7 @@ public:
 
     // Allow NetworkManager direct access to private members.
     friend class NetworkManager;
+    friend class PlayerNetworkHandler;
 
     // Returns the current GameplayState (if active).
     GameplayState* GetGameplayState();
@@ -150,6 +152,8 @@ public:
     void SyncEnemies();
     NetworkManager* GetNetworkManager() { return networkManager; }
     EntityManager* GetEntityManager() { return entityManager; }
+    PlayerNetworkHandler* GetPlayerHandler() { return playerNetworkHandler; }
+
     bool AllPlayersReady();
     bool lobbyListUpdated = false; // Flag for lobby list update.
     CSteamID GetCurrentLobby() const { return m_currentLobby; }
@@ -213,6 +217,7 @@ private:
     // Manager Pointers
     //--------------------------------------------------------------------------
     NetworkManager* networkManager = nullptr;
+    PlayerNetworkHandler* playerNetworkHandler;
     std::unique_ptr<EntityManager> entityManagerPtr;
     //--------------------------------------------------------------------------
     // Private Helper Methods
