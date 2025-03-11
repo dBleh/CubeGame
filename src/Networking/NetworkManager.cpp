@@ -1,6 +1,7 @@
 #include "NetworkManager.h"
 #include "../Core/CubeGame.h"
 #include "../States/GameplayState.h"
+#include "PlayerNetworkHandler.h"
 #include <steam/steam_api.h>
 #include <iostream>
 #include <cstring>
@@ -38,6 +39,7 @@ NetworkManager::NetworkManager(bool debugMode, CubeGame* gameInstance)
     });
 
     usageClock.restart();
+    playerHandler = new PlayerNetworkHandler(gameInstance, this);
 }
 
 NetworkManager::~NetworkManager() {
@@ -73,21 +75,6 @@ bool NetworkManager::broadcastMessage(const std::string &msg) {
 
 void NetworkManager::processCallbacks() {
     SteamAPI_RunCallbacks();
-    
-    for (auto& [id, state] : m_playerStates) {
-        if (game->entityManager->getPlayers().count(id) > 0) {
-            Player& p = game->entityManager->getPlayers()[id];
-            if (id != game->localSteamID) {
-                float t = state.interpolationClock.getElapsedTime().asSeconds() / INTERPOLATION_TIME;
-                if (t <= 1.0f) {
-                    p.renderedX = state.lastX + (state.targetX - state.lastX) * t;
-                    p.renderedY = state.lastY + (state.targetY - state.lastY) * t;
-                    p.shape.setPosition(p.renderedX, p.renderedY);
-                }
-            }
-        }
-    }
-
     if (usageClock.getElapsedTime().asSeconds() >= usageReportInterval) {
         // ReportNetworkUsage();
         ResetNetworkUsage();
@@ -163,8 +150,8 @@ void NetworkManager::setIsConnectedToHost(bool b) {
 void NetworkManager::ProcessNetworkMessages(const std::string& msg, CSteamID sender) {
     if (msg.empty()) return;
 
-    if (msg.find("PLAYER_LOADED") == 0) HandlePlayerLoaded(msg);
-    else if (msg[0] == 'P') HandlePlayerUpdate(msg);
+    if (msg.find("PLAYER_LOADED") == 0) playerHandler->HandlePlayerLoaded(msg);
+    else if (msg[0] == 'P') playerHandler->HandlePlayerUpdate(msg);
     else if (msg.find("E|SPAWN") == 0) HandleEnemySpawn(msg);
     else if (msg.find("E|UPDATE") == 0) HandleEnemyUpdate(msg);
     else if (msg.find("E|DEATH") == 0) HandleEnemyDeath(msg);
@@ -182,109 +169,8 @@ void NetworkManager::ProcessNetworkMessages(const std::string& msg, CSteamID sen
     }
 }
 
-void NetworkManager::HandlePlayerLoaded(const std::string& msg) {
-    uint64_t steamID;
-    if (sscanf(msg.c_str(), "PLAYER_LOADED|%llu", &steamID) == 1) {
-        game->playerLoadedStatus[CSteamID(steamID)] = true;
-    }
-}
-void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
-    std::vector<std::string> parts;
-    std::stringstream ss(msg);
-    std::string part;
-    while (std::getline(ss, part, '|')) parts.push_back(part);
 
-    if (parts.empty() || parts[0] != "P") return;
 
-    bool isKeyValue = (parts.size() > 1 && parts[1] == "D");
-    size_t minParts = isKeyValue ? 3 : 12;
-    if (parts.size() < minParts) return;
-
-    size_t idIndex = isKeyValue ? 2 : 1;
-    CSteamID id(std::stoull(parts[idIndex]));
-
-    if (game->entityManager->getPlayers().count(id) == 0) {
-        Player newPlayer;
-        newPlayer.initialize();
-        newPlayer.steamID = id;
-        game->entityManager->getPlayers()[id] = newPlayer;
-    }
-    Player& p = game->entityManager->getPlayers()[id];
-
-    if (id == game->localSteamID) {
-        if (isKeyValue) {
-            size_t i = 3;
-            while (i + 1 < parts.size()) {
-                if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
-                else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
-                else if (parts[i] == "h") p.health = std::stoi(parts[i + 1]);
-                else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]) != 0;
-                else if (parts[i] == "k") p.kills = std::stoi(parts[i + 1]);
-                else if (parts[i] == "m") p.money = std::stoi(parts[i + 1]);
-                else if (parts[i] == "t") p.lastUpdateTimestamp = std::stoull(parts[i + 1]);
-                i += 2;
-            }
-            game->GetLocalPlayer() = p;
-        }
-    } else {
-        if (!isKeyValue) {
-            p.lastX = p.x;
-            p.lastY = p.y;
-            p.x = std::stof(parts[2]);
-            p.y = std::stof(parts[3]);
-            p.renderedX = std::stof(parts[4]);
-            p.renderedY = std::stof(parts[5]);
-            p.health = std::stoi(parts[6]);
-            p.kills = std::stoi(parts[7]);
-            p.ready = std::stoi(parts[8]) != 0;
-            p.money = std::stoi(parts[9]);
-            p.speed = std::stof(parts[10]);
-            p.isAlive = std::stoi(parts[11]) != 0;
-        } else {
-            float receivedAngle = p.orbitingCube.angle;
-            uint64_t receivedStartTimestamp = p.startTimestamp;
-            uint64_t receivedTimestamp = p.lastUpdateTimestamp;
-            size_t i = 3;
-            while (i + 1 < parts.size()) {
-                if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
-                else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
-                else if (parts[i] == "rx") p.renderedX = std::stof(parts[i + 1]);
-                else if (parts[i] == "ry") p.renderedY = std::stof(parts[i + 1]);
-                else if (parts[i] == "h") p.health = std::stoi(parts[i + 1]);
-                else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]) != 0;
-                else if (parts[i] == "k") p.kills = std::stoi(parts[i + 1]);
-                else if (parts[i] == "m") p.money = std::stoi(parts[i + 1]);
-                else if (parts[i] == "r") p.ready = std::stoi(parts[i + 1]) != 0;
-                else if (parts[i] == "s") p.speed = std::stof(parts[i + 1]);
-                else if (parts[i] == "oca") receivedAngle = std::stof(parts[i + 1]);
-                else if (parts[i] == "st") receivedStartTimestamp = std::stoull(parts[i + 1]);
-                else if (parts[i] == "t") receivedTimestamp = std::stoull(parts[i + 1]);
-                i += 2;
-            }
-
-            // Sync start timestamp if newer
-            if (receivedTimestamp > p.lastUpdateTimestamp) {
-                p.lastUpdateTimestamp = receivedTimestamp;
-                p.startTimestamp = receivedStartTimestamp;
-                p.orbitingCube.angle = receivedAngle;
-            }
-
-            // Calculate current angle based on total elapsed time since start
-            uint64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::system_clock::now().time_since_epoch()).count();
-            float elapsedTime = (now - p.startTimestamp) / 1000.0f;
-            p.orbitingCube.angle = p.orbitingCube.angularSpeed * elapsedTime;
-            p.orbitingCube.angle = std::fmod(p.orbitingCube.angle, 2 * M_PI);
-
-            p.orbitingCube.x = p.x + p.orbitingCube.radius * std::cos(p.orbitingCube.angle);
-            p.orbitingCube.y = p.y + p.orbitingCube.radius * std::sin(p.orbitingCube.angle);
-            p.lastX = p.x;
-            p.lastY = p.y;
-        }
-        p.shape.setPosition(p.renderedX, p.renderedY);
-        p.orbitingCube.shape.setPosition(p.orbitingCube.x, p.orbitingCube.y);
-    }
-}
 void NetworkManager::HandleEnemySpawn(const std::string& msg) {
     uint64_t enemyID, timestamp;
     float x, y, spawnDelay;
@@ -501,39 +387,7 @@ void NetworkManager::ResetNetworkUsage() {
 }
 
 void NetworkManager::SendPlayerUpdate() {
-    Player& p = game->entityManager->getPlayers()[game->localSteamID];
-    if (std::isnan(p.x) || std::isnan(p.y)) p.x = p.y = 0.0f;
-
-    uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-
-    std::ostringstream oss;
-    oss << "P|D|" << p.steamID.ConvertToUint64()
-        << "|x|" << p.x
-        << "|y|" << p.y
-        << "|h|" << p.health
-        << "|k|" << p.kills
-        << "|r|" << (p.ready ? 1 : 0)
-        << "|m|" << p.money
-        << "|s|" << p.speed
-        << "|a|" << (p.isAlive ? 1 : 0)
-        << "|oca|" << p.orbitingCube.angle  // Current angle
-        << "|st|" << p.startTimestamp       // Start timestamp for sync
-        << "|t|" << timestamp;              // Current timestamp for reference
-
-    std::string msg = oss.str();
-    if (game->m_isHost) {
-        broadcastMessage(msg);
-    } else {
-        const char* hostStr = SteamMatchmaking()->GetLobbyData(game->m_currentLobby, "host_steam_id");
-        if (hostStr && *hostStr) {
-            CSteamID hostID(std::stoull(hostStr));
-            sendMessage(hostID, msg);
-        }
-    }
-
-    p.lastUpdateTimestamp = timestamp;
-    game->entityManager->getPlayers()[game->localSteamID] = p;
+    playerHandler->SendPlayerUpdate();
 }
 
 void NetworkManager::SendGameplayMessage(const std::string& msg) {
@@ -548,13 +402,7 @@ void NetworkManager::SendGameplayMessage(const std::string& msg) {
     }
 }
 
-void NetworkManager::ThrottledSendPlayerUpdate() {
-    const float playerUpdateRate = 0.033f; // Send updates every 0.1 seconds
-    if (m_playerUpdateClock.getElapsedTime().asSeconds() >= playerUpdateRate) {
-        SendPlayerUpdate(); // Send update regardless of movement
-        m_playerUpdateClock.restart();
-    }
-}
+
 
 void NetworkManager::SpawnEnemiesAndBroadcast() {
     if (!game->m_isHost) return;

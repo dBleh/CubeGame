@@ -14,7 +14,7 @@
 
 class CubeGame;
 class EntityManager;
-
+class PlayerNetworkHandler;
 
 class NetworkManager {
 public:
@@ -36,6 +36,7 @@ public:
     // Message handlers
     void HandlePlayerLoaded(const std::string& msg);
     void HandlePlayerUpdate(const std::string& msg);
+
     void HandleEnemySpawn(const std::string& msg);
     void HandleEnemyUpdate(const std::string& msg);
     void HandleEnemyDeath(const std::string& msg);  // Handler for explicit death
@@ -60,7 +61,7 @@ public:
     void SyncEnemiesFull();                         // New function for full enemy sync
     void BroadcastEnemySpawns();
     void SpawnEnemiesAndBroadcast();
-    void ThrottledSendPlayerUpdate();
+
     void BroadcastEnemyDeath(uint64_t enemyId, CSteamID killerID);
     void HandleEnemyRemove(const std::string& msg);
     void HandleCollisionsAndSync(float dt, CubeGame* game);
@@ -68,7 +69,9 @@ public:
     void broadcastGameOver();                   // Signal game over
     void syncLevelTransition(float duration);
     void syncEntities(EntityManager* em); // Sync flagged entities
+    PlayerNetworkHandler* playerHandler;   
 private:
+     
     std::map<CSteamID, uint64_t> m_lastPlayerUpdateTime;
     struct NetworkStats {
         size_t bytesSent = 0;
