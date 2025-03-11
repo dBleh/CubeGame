@@ -50,6 +50,7 @@ public:
     friend class NetworkManager;
     friend class PlayerNetworkHandler;
     friend class EnemyNetworkHandler;
+    friend class EntityManager;
 
     // Returns the current GameplayState (if active).
     GameplayState* GetGameplayState();

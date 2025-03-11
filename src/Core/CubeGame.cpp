@@ -74,6 +74,9 @@ std::string CubeGame::FormatPlayerUpdate(const Player& p) {
 CubeGame::CubeGame() : hud(font) {
     networkManager = new NetworkManager(debugMode, this);
     entityManager = new EntityManager();
+    // CubeGame.cpp, around line 77
+entityManager = new EntityManager();
+entityManager->setGame(this); // Use public setter
     playerNetworkHandler = new PlayerNetworkHandler(this, networkManager);
 
     if (!debugMode) {
@@ -163,6 +166,7 @@ void CubeGame::Run() {
             accumulator -= fixedDt;
         }
         entityManager->applyQueuedUpdates(); // Apply updates after collisions
+        
 
         sf::Event event;
         while (window.pollEvent(event)) {
