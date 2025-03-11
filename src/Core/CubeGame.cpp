@@ -139,30 +139,23 @@ void CubeGame::Run() {
     sf::Clock clock;
     const float fixedDt = 1.0f / 60.0f;
     float accumulator = 0.0f;
-    float fullSyncTimer = 0.0f;
-    const float FULL_SYNC_INTERVAL = 5.0f; // Every 5 seconds
 
     while (window.isOpen()) {
         networkManager->processCallbacks();
-        networkManager->receiveMessages();
-        networkManager->syncEntities(entityManager);
-        entityManager->applyQueuedUpdates();
+        networkManager->receiveMessages(); // Single point of receiving
+        networkManager->syncEntities(entityManager); // Sync flagged entities
+        entityManager->applyQueuedUpdates(); // Apply network updates
 
         float frameTime = clock.restart().asSeconds();
         if (frameTime > 0.25f) frameTime = 0.25f;
         accumulator += frameTime;
-        fullSyncTimer += frameTime;
 
         while (accumulator >= fixedDt) {
             if (m_isHost) {
                 enemySyncTimer += fixedDt;
                 if (enemySyncTimer >= ENEMY_SYNC_INTERVAL) {
-                    networkManager->SyncEnemies();
+                    networkManager->SyncEnemies(); // Existing periodic sync
                     enemySyncTimer = 0.0f;
-                }
-                if (fullSyncTimer >= FULL_SYNC_INTERVAL) {
-                    networkManager->SyncEnemiesFull(); // Full sync every 5 seconds
-                    fullSyncTimer = 0.0f;
                 }
             }
             if (shootCooldown > 0) shootCooldown -= fixedDt;
@@ -211,6 +204,88 @@ void CubeGame::Run() {
             state->Render();
         }
     }
+}
+
+
+void CubeGame::StartGame() {
+    // Only start game if in lobby and not already playing.
+    if (!inLobby || currentState == GameState::Playing) {
+        return;
+    }
+    if (hasGameBeenPlayed) {
+        ResetGame();  // Only reset if a game was already played.
+    }
+    if (m_isHost) {
+        // Check that all clients are connected.
+        bool allConnected = true;
+        int memberCount = SteamMatchmaking()->GetNumLobbyMembers(m_currentLobby);
+        for (int i = 0; i < memberCount; i++) {
+            CSteamID member = SteamMatchmaking()->GetLobbyMemberByIndex(m_currentLobby, i);
+            if (member != SteamUser()->GetSteamID()) {
+                auto& connectedClients = networkManager->getConnectedClients();
+                if (connectedClients.count(member) == 0 || !connectedClients.at(member)) {
+                    allConnected = false;
+                    break;
+                }
+            }
+        }
+        if (!allConnected) {
+            return;
+        }
+
+        // Reset and broadcast all player states.
+        for (auto& [id, player] : entityManager->getPlayers()) {
+            ResetPlayerState(player);
+            SteamMatchmaking()->SetLobbyMemberData(m_currentLobby, "ready", "0");
+
+            std::string updateMsg = FormatPlayerUpdate(player);
+            if (!updateMsg.empty()) {
+                networkManager->broadcastMessage(updateMsg);
+            }
+        }
+
+        // Reset local player state.
+        Player& localPlayer = entityManager->getPlayers()[localSteamID];
+        ResetPlayerState(localPlayer);
+        entityManager->getPlayers()[localSteamID] = localPlayer;
+        
+        // Spawn enemies and sync with clients.
+        entityManager->spawnEnemies(enemiesPerWave, entityManager->getPlayers(), localSteamID.ConvertToUint64());
+        networkManager->SyncEnemiesFull();
+
+        // Send game start message.
+        char startBuffer[64];
+        int startBytes = snprintf(startBuffer, sizeof(startBuffer), "S|START");
+        if (startBytes > 0 && static_cast<size_t>(startBytes) < sizeof(startBuffer)) {
+            networkManager->SendGameplayMessage(std::string(startBuffer));
+        }
+
+        // Broadcast enemy spawn messages.
+        uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+
+        for (auto& [eid, enemy] : entityManager->getEnemies()) {
+                enemy.spawnDelay = CubeGame::INITIAL_WAVE_DELAY;
+                char buffer[128];
+                int bytes = snprintf(buffer, sizeof(buffer),
+                                     "E|SPAWN|%llu|%.1f|%.1f|%d|%.2f|%d|%llu",
+                                     eid, enemy.x, enemy.y, enemy.health, enemy.spawnDelay,
+                                     static_cast<int>(enemy.type), timestamp);
+                if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
+                    networkManager->broadcastMessage(std::string(buffer));
+            }
+        }
+    }
+
+    // Transition to gameplay.
+    currentState = GameState::Playing;
+    inLobby = false;
+    gameStarted = true;
+    hasGameBeenPlayed = true;
+    currentLevel = 1;
+    enemiesPerWave = 5;
+    entityManager->getBullets().clear();
+    ResetViewToDefault();
 }
 
 //--------------------------------------
@@ -363,86 +438,7 @@ void CubeGame::ReturnToMainMenu() {
 //--------------------------------------
 // Game Start and Enemy Spawning
 //--------------------------------------
-void CubeGame::StartGame() {
-    // Only start game if in lobby and not already playing.
-    if (!inLobby || currentState == GameState::Playing) {
-        return;
-    }
-    if (hasGameBeenPlayed) {
-        ResetGame();  // Only reset if a game was already played.
-    }
-    if (m_isHost) {
-        // Check that all clients are connected.
-        bool allConnected = true;
-        int memberCount = SteamMatchmaking()->GetNumLobbyMembers(m_currentLobby);
-        for (int i = 0; i < memberCount; i++) {
-            CSteamID member = SteamMatchmaking()->GetLobbyMemberByIndex(m_currentLobby, i);
-            if (member != SteamUser()->GetSteamID()) {
-                auto& connectedClients = networkManager->getConnectedClients();
-                if (connectedClients.count(member) == 0 || !connectedClients.at(member)) {
-                    allConnected = false;
-                    break;
-                }
-            }
-        }
-        if (!allConnected) {
-            return;
-        }
 
-        // Reset and broadcast all player states.
-        for (auto& [id, player] : entityManager->getPlayers()) {
-            ResetPlayerState(player);
-            SteamMatchmaking()->SetLobbyMemberData(m_currentLobby, "ready", "0");
-
-            std::string updateMsg = FormatPlayerUpdate(player);
-            if (!updateMsg.empty()) {
-                networkManager->broadcastMessage(updateMsg);
-            }
-        }
-
-        // Reset local player state.
-        Player& localPlayer = entityManager->getPlayers()[localSteamID];
-        ResetPlayerState(localPlayer);
-        entityManager->getPlayers()[localSteamID] = localPlayer;
-        
-        // Spawn enemies and sync with clients.
-        entityManager->spawnEnemies(enemiesPerWave, entityManager->getPlayers(), localSteamID.ConvertToUint64());
-        networkManager->SyncEnemiesFull();
-
-        // Send game start message.
-        char startBuffer[64];
-        int startBytes = snprintf(startBuffer, sizeof(startBuffer), "S|START");
-        if (startBytes > 0 && static_cast<size_t>(startBytes) < sizeof(startBuffer)) {
-            networkManager->SendGameplayMessage(std::string(startBuffer));
-        }
-
-        // Broadcast enemy spawn messages.
-        uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count();
-
-        for (auto& [eid, enemy] : entityManager->getEnemies()) {
-                enemy.spawnDelay = CubeGame::INITIAL_WAVE_DELAY;
-                char buffer[128];
-                int bytes = snprintf(buffer, sizeof(buffer),
-                                     "E|SPAWN|%llu|%.1f|%.1f|%d|%.2f|%d|%llu",
-                                     eid, enemy.x, enemy.y, enemy.health, enemy.spawnDelay,
-                                     static_cast<int>(enemy.type), timestamp);
-                if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
-                    networkManager->broadcastMessage(std::string(buffer));
-            }
-        }
-    }
-
-    // Transition to gameplay.
-    currentState = GameState::Playing;
-    inLobby = false;
-    gameStarted = true;
-    hasGameBeenPlayed = true;
-    currentLevel = 1;
-    enemiesPerWave = 5;
-    entityManager->getBullets().clear();
-    ResetViewToDefault();
-}
 
 //--------------------------------------
 // Player Loading Check

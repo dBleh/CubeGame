@@ -51,7 +51,7 @@ public:
     
     void ReportNetworkUsage() const;
     void ResetNetworkUsage();
-    static std::vector<std::string> split(const std::string& s, char delimiter);
+    
     // Network/game functions
     void ProcessNetworkMessages(const std::string& msg, CSteamID sender);
     void SendGameplayMessage(const std::string& msg);
@@ -68,7 +68,6 @@ public:
     void broadcastGameOver();                   // Signal game over
     void syncLevelTransition(float duration);
     void syncEntities(EntityManager* em); // Sync flagged entities
-    void HandlePlayerSpawn(const std::string& msg);
 private:
     std::map<CSteamID, uint64_t> m_lastPlayerUpdateTime;
     struct NetworkStats {
@@ -100,7 +99,7 @@ private:
     std::map<std::string, NetworkStats> networkUsage;
     sf::Clock usageClock;
     float usageReportInterval = 10.0f;
-    const float INTERPOLATION_TIME = 0.033f;
+    const float INTERPOLATION_TIME = 0.1f;
     
     STEAM_CALLBACK(NetworkManager, OnLobbyCreated, LobbyCreated_t, m_cbLobbyCreated);
     STEAM_CALLBACK(NetworkManager, OnGameLobbyJoinRequested, GameLobbyJoinRequested_t, m_cbGameLobbyJoinRequested);

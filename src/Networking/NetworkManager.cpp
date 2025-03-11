@@ -73,9 +73,23 @@ bool NetworkManager::broadcastMessage(const std::string &msg) {
 
 void NetworkManager::processCallbacks() {
     SteamAPI_RunCallbacks();
-    // Remove PlayerState interpolation logic here; rely on EntityManager
+    
+    for (auto& [id, state] : m_playerStates) {
+        if (game->entityManager->getPlayers().count(id) > 0) {
+            Player& p = game->entityManager->getPlayers()[id];
+            if (id != game->localSteamID) {
+                float t = state.interpolationClock.getElapsedTime().asSeconds() / INTERPOLATION_TIME;
+                if (t <= 1.0f) {
+                    p.renderedX = state.lastX + (state.targetX - state.lastX) * t;
+                    p.renderedY = state.lastY + (state.targetY - state.lastY) * t;
+                    p.shape.setPosition(p.renderedX, p.renderedY);
+                }
+            }
+        }
+    }
+
     if (usageClock.getElapsedTime().asSeconds() >= usageReportInterval) {
-        ReportNetworkUsage();
+        // ReportNetworkUsage();
         ResetNetworkUsage();
         usageClock.restart();
     }
@@ -146,87 +160,11 @@ void NetworkManager::setIsConnectedToHost(bool b) {
     isConnectedToHost = b;
 }
 
-std::vector<std::string> NetworkManager::split(const std::string& s, char delimiter) {
-    std::vector<std::string> tokens;
-    std::string token;
-    std::istringstream tokenStream(s);
-    while (std::getline(tokenStream, token, delimiter)) {
-        tokens.push_back(token);
-    }
-    return tokens;
-}
-void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
-    std::vector<std::string> parts = split(msg, '|');
-    if (parts.size() < 3 || parts[0] != "P" || parts[1] != "D") return;
-
-    CSteamID id(std::stoull(parts[2]));
-    Player& p = game->entityManager->getPlayers()[id];
-    bool isKeyValue = parts.size() > 3;
-
-    if (!isKeyValue) return; // Malformed message
-
-    size_t i = 3;
-    while (i + 1 < parts.size()) {
-        if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
-        else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
-        else if (parts[i] == "vx") p.velocityX = std::stof(parts[i + 1]);
-        else if (parts[i] == "vy") p.velocityY = std::stof(parts[i + 1]);
-        else if (parts[i] == "h") p.health = std::stoi(parts[i + 1]);
-        else if (parts[i] == "k") p.kills = std::stoi(parts[i + 1]);
-        else if (parts[i] == "r") {} // Unknown field, ignore for now
-        else if (parts[i] == "m") p.money = std::stoi(parts[i + 1]);
-        else if (parts[i] == "s") p.speed = std::stof(parts[i + 1]);
-        else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]) != 0;
-        else if (parts[i] == "oca") p.orbitingCube.angle = std::stof(parts[i + 1]);
-        else if (parts[i] == "st") {} // Start time, ignore for now
-        else if (parts[i] == "t") {} // Timestamp, ignore for now
-        i += 2;
-    }
-
-    if (id != game->localSteamID) {
-        p.lastX = p.renderedX;
-        p.lastY = p.renderedY;
-        p.renderedX = p.x;
-        p.renderedY = p.y;
-        p.interpolationTime = Player::INTERPOLATION_DURATION;
-        p.orbitingCube.x = p.x + p.orbitingCube.radius * std::cos(p.orbitingCube.angle);
-        p.orbitingCube.y = p.y + p.orbitingCube.radius * std::sin(p.orbitingCube.angle);
-    }
-    p.shape.setPosition(p.renderedX, p.renderedY);
-    std::cout << "[NetworkManager] Updated player " << id.ConvertToUint64() << " to (" << p.x << ", " << p.y << ")" << std::endl;
-}
-
-void NetworkManager::HandlePlayerSpawn(const std::string& msg) {
-    uint64_t steamID;
-    float x, y, renderedX, renderedY, speed;
-    int health, kills, unknown1, unknown2;
-    bool isAlive;
-    if (sscanf(msg.c_str(), "P|%llu|%f|%f|%f|%f|%d|%d|%d|%d|%f|%d", 
-                &steamID, &x, &y, &renderedX, &renderedY, &health, &kills, 
-                &unknown1, &unknown2, &speed, &isAlive) == 11) {
-        Player& p = game->entityManager->getPlayers()[CSteamID(steamID)];
-        p.steamID = CSteamID(steamID);
-        p.x = x;
-        p.y = y;
-        p.renderedX = renderedX;
-        p.renderedY = renderedY;
-        p.health = health;
-        p.kills = kills;
-        p.speed = speed;
-        p.isAlive = isAlive;
-        p.shape.setPosition(renderedX, renderedY);
-        std::cout << "[NetworkManager] Spawned player " << steamID << " at (" << x << ", " << y << ")" << std::endl;
-    } else {
-        std::cerr << "[NetworkManager] Failed to parse player spawn: " << msg << std::endl;
-    }
-}
 void NetworkManager::ProcessNetworkMessages(const std::string& msg, CSteamID sender) {
     if (msg.empty()) return;
 
     if (msg.find("PLAYER_LOADED") == 0) HandlePlayerLoaded(msg);
-    else if (msg.find("P|D|") == 0) HandlePlayerUpdate(msg);
-    else if (msg.find("P|") == 0 && msg.find("P|D|") != 0) HandlePlayerSpawn(msg);
-   
+    else if (msg[0] == 'P') HandlePlayerUpdate(msg);
     else if (msg.find("E|SPAWN") == 0) HandleEnemySpawn(msg);
     else if (msg.find("E|UPDATE") == 0) HandleEnemyUpdate(msg);
     else if (msg.find("E|DEATH") == 0) HandleEnemyDeath(msg);
@@ -243,51 +181,152 @@ void NetworkManager::ProcessNetworkMessages(const std::string& msg, CSteamID sen
         std::cout << "[NetworkManager] Unhandled message: " << msg << std::endl;
     }
 }
+
 void NetworkManager::HandlePlayerLoaded(const std::string& msg) {
     uint64_t steamID;
     if (sscanf(msg.c_str(), "PLAYER_LOADED|%llu", &steamID) == 1) {
         game->playerLoadedStatus[CSteamID(steamID)] = true;
     }
 }
+void NetworkManager::HandlePlayerUpdate(const std::string& msg) {
+    std::vector<std::string> parts;
+    std::stringstream ss(msg);
+    std::string part;
+    while (std::getline(ss, part, '|')) parts.push_back(part);
+
+    if (parts.empty() || parts[0] != "P") return;
+
+    bool isKeyValue = (parts.size() > 1 && parts[1] == "D");
+    size_t minParts = isKeyValue ? 3 : 12;
+    if (parts.size() < minParts) return;
+
+    size_t idIndex = isKeyValue ? 2 : 1;
+    CSteamID id(std::stoull(parts[idIndex]));
+
+    if (game->entityManager->getPlayers().count(id) == 0) {
+        Player newPlayer;
+        newPlayer.initialize();
+        newPlayer.steamID = id;
+        game->entityManager->getPlayers()[id] = newPlayer;
+    }
+    Player& p = game->entityManager->getPlayers()[id];
+
+    if (id == game->localSteamID) {
+        if (isKeyValue) {
+            size_t i = 3;
+            while (i + 1 < parts.size()) {
+                if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
+                else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
+                else if (parts[i] == "h") p.health = std::stoi(parts[i + 1]);
+                else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]) != 0;
+                else if (parts[i] == "k") p.kills = std::stoi(parts[i + 1]);
+                else if (parts[i] == "m") p.money = std::stoi(parts[i + 1]);
+                else if (parts[i] == "t") p.lastUpdateTimestamp = std::stoull(parts[i + 1]);
+                i += 2;
+            }
+            game->GetLocalPlayer() = p;
+        }
+    } else {
+        if (!isKeyValue) {
+            p.lastX = p.x;
+            p.lastY = p.y;
+            p.x = std::stof(parts[2]);
+            p.y = std::stof(parts[3]);
+            p.renderedX = std::stof(parts[4]);
+            p.renderedY = std::stof(parts[5]);
+            p.health = std::stoi(parts[6]);
+            p.kills = std::stoi(parts[7]);
+            p.ready = std::stoi(parts[8]) != 0;
+            p.money = std::stoi(parts[9]);
+            p.speed = std::stof(parts[10]);
+            p.isAlive = std::stoi(parts[11]) != 0;
+        } else {
+            float receivedAngle = p.orbitingCube.angle;
+            uint64_t receivedStartTimestamp = p.startTimestamp;
+            uint64_t receivedTimestamp = p.lastUpdateTimestamp;
+            size_t i = 3;
+            while (i + 1 < parts.size()) {
+                if (parts[i] == "x") p.x = std::stof(parts[i + 1]);
+                else if (parts[i] == "y") p.y = std::stof(parts[i + 1]);
+                else if (parts[i] == "rx") p.renderedX = std::stof(parts[i + 1]);
+                else if (parts[i] == "ry") p.renderedY = std::stof(parts[i + 1]);
+                else if (parts[i] == "h") p.health = std::stoi(parts[i + 1]);
+                else if (parts[i] == "a") p.isAlive = std::stoi(parts[i + 1]) != 0;
+                else if (parts[i] == "k") p.kills = std::stoi(parts[i + 1]);
+                else if (parts[i] == "m") p.money = std::stoi(parts[i + 1]);
+                else if (parts[i] == "r") p.ready = std::stoi(parts[i + 1]) != 0;
+                else if (parts[i] == "s") p.speed = std::stof(parts[i + 1]);
+                else if (parts[i] == "oca") receivedAngle = std::stof(parts[i + 1]);
+                else if (parts[i] == "st") receivedStartTimestamp = std::stoull(parts[i + 1]);
+                else if (parts[i] == "t") receivedTimestamp = std::stoull(parts[i + 1]);
+                i += 2;
+            }
+
+            // Sync start timestamp if newer
+            if (receivedTimestamp > p.lastUpdateTimestamp) {
+                p.lastUpdateTimestamp = receivedTimestamp;
+                p.startTimestamp = receivedStartTimestamp;
+                p.orbitingCube.angle = receivedAngle;
+            }
+
+            // Calculate current angle based on total elapsed time since start
+            uint64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+            float elapsedTime = (now - p.startTimestamp) / 1000.0f;
+            p.orbitingCube.angle = p.orbitingCube.angularSpeed * elapsedTime;
+            p.orbitingCube.angle = std::fmod(p.orbitingCube.angle, 2 * M_PI);
+
+            p.orbitingCube.x = p.x + p.orbitingCube.radius * std::cos(p.orbitingCube.angle);
+            p.orbitingCube.y = p.y + p.orbitingCube.radius * std::sin(p.orbitingCube.angle);
+            p.lastX = p.x;
+            p.lastY = p.y;
+        }
+        p.shape.setPosition(p.renderedX, p.renderedY);
+        p.orbitingCube.shape.setPosition(p.orbitingCube.x, p.orbitingCube.y);
+    }
+}
+void NetworkManager::HandleEnemySpawn(const std::string& msg) {
+    uint64_t enemyID, timestamp;
+    float x, y, spawnDelay;
+    int health, type;
+    int parsed = sscanf(msg.c_str(), "E|SPAWN|%llu|%f|%f|%d|%f|%d|%llu",
+                        &enemyID, &x, &y, &health, &spawnDelay, &type, &timestamp);
+    if (parsed == 7) {
+        if (!m_lastEnemyUpdateTime.count(enemyID) || m_lastEnemyUpdateTime[enemyID] < timestamp) {
+            EntityUpdate update;
+            update.type = EntityUpdate::Type::Spawn;
+            update.id = enemyID;
+            update.x = x;
+            update.y = y;
+            update.health = health;
+            update.spawnDelay = spawnDelay;
+            update.enemyType = static_cast<Enemy::Type>(type);
+            update.timestamp = timestamp;
+            game->entityManager->queueUpdate(update);
+            m_lastEnemyUpdateTime[enemyID] = timestamp;
+        }
+    }
+}
+
 void NetworkManager::HandleEnemyUpdate(const std::string& msg) {
     uint64_t enemyID, timestamp;
     float x, y, spawnDelay;
     int health;
     if (sscanf(msg.c_str(), "E|UPDATE|%llu|%f|%f|%d|%f|%llu", &enemyID, &x, &y, &health, &spawnDelay, &timestamp) == 6) {
         if (!m_lastEnemyUpdateTime.count(enemyID) || m_lastEnemyUpdateTime[enemyID] < timestamp) {
-            auto& enemies = game->entityManager->getEnemies();
-            if (enemies.count(enemyID)) {
-                Enemy& e = enemies[enemyID];
-                e.lastX = e.renderedX;
-                e.lastY = e.renderedY;
-                e.x = x;
-                e.y = y;
-                e.health = health;
-                e.spawnDelay = spawnDelay;
-                e.interpolationTime = INTERPOLATION_TIME;
-                m_lastEnemyUpdateTime[enemyID] = timestamp;
-                std::cout << "Client updated enemy " << enemyID << " to (" << x << ", " << y << ")" << std::endl;
-            }
+            EntityUpdate update;
+            update.type = EntityUpdate::Type::Update;
+            update.id = enemyID;
+            update.x = x;
+            update.y = y;
+            update.health = health;
+            update.spawnDelay = spawnDelay;
+            update.timestamp = timestamp;
+            game->entityManager->queueUpdate(update);
+            m_lastEnemyUpdateTime[enemyID] = timestamp;
         }
     }
 }
-void NetworkManager::HandleEnemySpawn(const std::string& msg) {
-    uint64_t enemyID, timestamp;
-    float x, y, spawnDelay;
-    int health;
-    if (sscanf(msg.c_str(), "E|SPAWN|%llu|%f|%f|%d|%f|%llu", &enemyID, &x, &y, &health, &spawnDelay, &timestamp) == 6) {
-        Enemy& e = game->entityManager->getEnemies()[enemyID];
-        e.id = enemyID;
-        e.x = e.renderedX = e.lastX = x;
-        e.y = e.renderedY = e.lastY = y;
-        e.health = health;
-        e.spawnDelay = spawnDelay;
-        e.shape.setPosition(x, y);
-        m_lastEnemyUpdateTime[enemyID] = timestamp;
-        std::cout << "Client spawned enemy " << enemyID << " at (" << x << ", " << y << ")" << std::endl;
-    }
-}
-
 
 void NetworkManager::HandleEnemyRemove(const std::string& msg) {
     uint64_t enemyID;
@@ -299,17 +338,13 @@ void NetworkManager::HandleEnemyRemove(const std::string& msg) {
     }
 }
 void NetworkManager::HandleEnemyDeath(const std::string& msg) {
-    uint64_t enemyID, deathSequence, killerID;
-    if (sscanf(msg.c_str(), "E|DEATH|%llu|%llu|%llu", &enemyID, &deathSequence, &killerID) == 3) {
-        std::cout << "Client processing E|DEATH| for enemy " << enemyID << std::endl;
-        auto& enemies = game->entityManager->getEnemies();
-        if (enemies.count(enemyID)) {
-            enemies.erase(enemyID);
-            std::cout << "Client removed enemy " << enemyID << std::endl;
+    uint64_t enemyID, timestamp, killerID;
+    if (sscanf(msg.c_str(), "E|DEATH|%llu|%llu|%llu", &enemyID, &timestamp, &killerID) == 3) {
+        if (!m_lastEnemyUpdateTime.count(enemyID) || m_lastEnemyUpdateTime[enemyID] < timestamp) {
+            game->entityManager->getEnemies().erase(enemyID);
+            m_lastEnemyUpdateTime[enemyID] = timestamp;
+           
         }
-        m_lastEnemyUpdateTime[enemyID] = deathSequence;
-    } else {
-        std::cerr << "Client failed to parse E|DEATH|: " << msg << std::endl;
     }
 }
 
@@ -476,8 +511,6 @@ void NetworkManager::SendPlayerUpdate() {
     oss << "P|D|" << p.steamID.ConvertToUint64()
         << "|x|" << p.x
         << "|y|" << p.y
-        << "|vx|" << p.velocityX 
-        << "|vy|" << p.velocityY
         << "|h|" << p.health
         << "|k|" << p.kills
         << "|r|" << (p.ready ? 1 : 0)
@@ -516,13 +549,11 @@ void NetworkManager::SendGameplayMessage(const std::string& msg) {
 }
 
 void NetworkManager::ThrottledSendPlayerUpdate() {
-    const float playerUpdateRate = 0.003f; // 30 Hz
-    //Not throttling because update times were acting strange.
-    SendPlayerUpdate();
-    /*if (m_playerUpdateClock.getElapsedTime().asSeconds() >= playerUpdateRate) {
-        SendPlayerUpdate(); // Send unconditionally
+    const float playerUpdateRate = 0.033f; // Send updates every 0.1 seconds
+    if (m_playerUpdateClock.getElapsedTime().asSeconds() >= playerUpdateRate) {
+        SendPlayerUpdate(); // Send update regardless of movement
         m_playerUpdateClock.restart();
-    }*/
+    }
 }
 
 void NetworkManager::SpawnEnemiesAndBroadcast() {
@@ -551,27 +582,26 @@ void NetworkManager::SpawnEnemiesAndBroadcast() {
 }
 void NetworkManager::SyncEnemies() {
     if (!game->m_isHost) return;
-
+    
     uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
-
-    auto& enemies = game->entityManager->getEnemies();
-    for (auto it = enemies.begin(); it != enemies.end();) {
+    
+    for (auto it = game->entityManager->getEnemies().begin(); it != game->entityManager->getEnemies().end();) {
         Enemy& enemy = it->second;
         if (enemy.health <= 0) {
-            char buffer[128];
-            int bytes = snprintf(buffer, sizeof(buffer), "E|DEATH|%llu|%llu|%llu",
-                                 enemy.id, enemy.deathSequence, 0ULL);
+            char buffer[64];
+            int bytes = snprintf(buffer, sizeof(buffer), "E|REMOVE|%llu", enemy.id);
             if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                 broadcastMessage(std::string(buffer));
             }
-            it = enemies.erase(it);
+            it = game->entityManager->getEnemies().erase(it);
         } else {
             char buffer[128];
             int bytes = snprintf(buffer, sizeof(buffer), "E|UPDATE|%llu|%.1f|%.1f|%d|%.2f|%llu",
-                                 enemy.id, enemy.x, enemy.y, enemy.health, enemy.spawnDelay, timestamp);
+                                enemy.id, enemy.x, enemy.y, enemy.health, enemy.spawnDelay, timestamp);
             if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                 broadcastMessage(std::string(buffer));
+                m_lastEnemyUpdateTime[enemy.id] = timestamp;
             }
             ++it;
         }
@@ -719,43 +749,69 @@ void NetworkManager::OnLobbyMatchList(LobbyMatchList_t* pParam) {
 
 
 void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
-    if (!game->IsHost()) return; // Only host processes collisions
+    // Access GameplayState for pendingHits and other state if needed
+    GameplayState* gameplayState = game->GetGameplayState();
+    if (!gameplayState) return;
 
+    // Collision handling
     game->GetEntityManager()->checkCollisions(
         [&](const Bullet& b, uint64_t enemyId) {
             int damage = 10;
-            if (game->GetEnemies().count(enemyId)) {
-                Enemy& enemy = game->GetEnemies()[enemyId];
-                enemy.health -= damage;
-                enemy.needsSync = true;
-                if (enemy.health <= 0) {
-                    Player& shooter = game->GetPlayers()[b.shooterSteamID];
-                    shooter.kills += 1;
-                    shooter.money += 10;
-                    game->GetPlayers()[b.shooterSteamID] = shooter;
+            if (game->IsHost() && game->GetEnemies().count(enemyId)) {
+                if (b.shooterSteamID == game->GetLocalPlayer().steamID) {
+                    Enemy& enemy = game->GetEnemies()[enemyId];
+                    enemy.health -= damage;
+                    if (enemy.health <= 0) {
+                        game->GetEntityManager()->getEnemies().erase(enemyId);
+                        Player& shooter = game->GetLocalPlayer();
+                        shooter.kills += 1;
+                        shooter.money += 10;
+                        game->GetLocalPlayer() = shooter; // Update local player
 
-                    char buffer[128];
-                    int bytes = snprintf(buffer, sizeof(buffer), "P|D|%llu|k|%d|m|%d",
-                                         shooter.steamID.ConvertToUint64(), shooter.kills, shooter.money);
-                    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
-                        broadcastMessage(std::string(buffer));
+                        char buffer[128];
+                        int bytes = snprintf(buffer, sizeof(buffer), "P|D|%llu|k|%d|m|%d",
+                                             shooter.steamID.ConvertToUint64(), shooter.kills, shooter.money);
+                        if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
+                            broadcastMessage(std::string(buffer));
+                        }
+                        bytes = snprintf(buffer, sizeof(buffer), "E|REMOVE|%llu", enemyId);
+                        if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
+                            broadcastMessage(std::string(buffer));
+                        }
                     }
+                } else {
+                    uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::system_clock::now().time_since_epoch()).count();
+                    char hitBuffer[128];
+                    snprintf(hitBuffer, sizeof(hitBuffer), "H|%llu|%llu|%llu|%d|%llu",
+                             b.id, enemyId, b.shooterSteamID.ConvertToUint64(), damage, timestamp);
+                    SendGameplayMessage(std::string(hitBuffer));
+                }
+            } else if (!game->IsHost()) {
+                uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::system_clock::now().time_since_epoch()).count();
+                char hitBuffer[128];
+                snprintf(hitBuffer, sizeof(hitBuffer), "H|%llu|%llu|%llu|%d|%llu",
+                         b.id, enemyId, game->GetLocalPlayer().steamID.ConvertToUint64(), damage, timestamp);
+                SendGameplayMessage(std::string(hitBuffer));
 
-                    bytes = snprintf(buffer, sizeof(buffer), "E|DEATH|%llu|%llu|%llu",
-                                     enemyId, enemy.deathSequence, b.shooterSteamID.ConvertToUint64());
-                    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
-                        broadcastMessage(std::string(buffer));
+                if (game->GetEnemies().count(enemyId)) {
+                    Enemy& enemy = game->GetEnemies()[enemyId];
+                    enemy.health -= damage;
+                    if (enemy.health <= 0) {
+                        game->GetEntityManager()->getEnemies().erase(enemyId);
                     }
-                    game->GetEntityManager()->getEnemies().erase(enemyId);
                 }
             }
         },
         [&](CSteamID playerId, uint64_t enemyId) {
             if (game->GetPlayers().count(playerId)) {
                 Player& player = game->GetPlayers()[playerId];
-                if (player.isAlive) {
+                if (player.isAlive && game->IsHost()) {
                     player.health -= 10;
-                    if (player.health <= 0) player.isAlive = false;
+                    if (player.health <= 0) {
+                        player.isAlive = false;
+                    }
                     char buffer[128];
                     int bytes = snprintf(buffer, sizeof(buffer), "P|D|%llu|h|%d|a|%d",
                                          player.steamID.ConvertToUint64(), player.health, player.isAlive ? 1 : 0);
@@ -763,12 +819,37 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
                         broadcastMessage(std::string(buffer));
                     }
                     game->GetPlayers()[playerId] = player;
+                    if (playerId == game->GetLocalPlayer().steamID) {
+                        game->GetLocalPlayer() = player;
+                    }
                 }
             }
         }
     );
 
-    // Sync orbiting cube collisions
+    // Process pending hits
+    for (auto it = gameplayState->pendingHits.begin(); it != gameplayState->pendingHits.end();) {
+        it->retryTimer -= dt;
+        if (it->retryTimer <= 0) {
+            if (game->GetEnemies().count(it->enemyId)) {
+                uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::system_clock::now().time_since_epoch()).count();
+                int damage = 10;
+                char hitBuffer[128];
+                snprintf(hitBuffer, sizeof(hitBuffer), "H|%llu|%llu|%llu|%d|%llu",
+                         it->bulletId, it->enemyId, it->shooterSteamID, damage, timestamp);
+                SendGameplayMessage(std::string(hitBuffer));
+                it->retryTimer = 0.5f;
+                ++it;
+            } else {
+                it = gameplayState->pendingHits.erase(it);
+            }
+        } else {
+            ++it;
+        }
+    }
+
+    // Handle orbiting cube collisions
     for (auto& [playerId, player] : game->GetPlayers()) {
         if (!player.orbitingCube.active || !player.isAlive) continue;
 
@@ -783,29 +864,53 @@ void NetworkManager::HandleCollisionsAndSync(float dt, CubeGame* game) {
                         Enemy& enemy = game->GetEnemies()[*it];
                         if (enemy.health > 0 && 
                             player.getOrbitingCubeBounds().intersects(enemy.getBounds())) {
-                            enemy.health -= 10;
-                            enemy.needsSync = true;
-                            if (enemy.health <= 0) {
-                                player.kills += 1;
-                                player.money += 10;
-                                game->GetPlayers()[playerId] = player;
+                            int damage = 10;
+                            if (game->IsHost()) {
+                                enemy.health -= damage;
+                                if (enemy.health <= 0) {
+                                    player.kills += 1;
+                                    player.money += 10;
+                                    game->GetPlayers()[playerId] = player;
+                                    if (playerId == game->GetLocalPlayer().steamID) {
+                                        game->GetLocalPlayer() = player;
+                                    }
 
-                                char buffer[128];
-                                int bytes = snprintf(buffer, sizeof(buffer), "P|D|%llu|k|%d|m|%d",
-                                                     player.steamID.ConvertToUint64(), player.kills, player.money);
-                                if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
-                                    broadcastMessage(std::string(buffer));
-                                }
+                                    char buffer[128];
+                                    int bytes = snprintf(buffer, sizeof(buffer), 
+                                                         "P|D|%llu|k|%d|m|%d",
+                                                         player.steamID.ConvertToUint64(), 
+                                                         player.kills, player.money);
+                                    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
+                                        broadcastMessage(std::string(buffer));
+                                    }
 
-                                bytes = snprintf(buffer, sizeof(buffer), "E|DEATH|%llu|%llu|%llu",
-                                                 *it, enemy.deathSequence, playerId.ConvertToUint64());
-                                if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
-                                    broadcastMessage(std::string(buffer));
+                                    bytes = snprintf(buffer, sizeof(buffer), 
+                                                     "E|REMOVE|%llu", *it);
+                                    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
+                                        broadcastMessage(std::string(buffer));
+                                    }
+
+                                    game->GetEntityManager()->getEnemies().erase(*it);
+                                    it = enemyIds.erase(it);
+                                } else {
+                                    ++it;
                                 }
-                                game->GetEntityManager()->getEnemies().erase(*it);
-                                it = enemyIds.erase(it);
-                            } else {
-                                ++it;
+                            } else { // Client
+                                uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    std::chrono::system_clock::now().time_since_epoch()).count();
+                                char hitBuffer[128];
+                                snprintf(hitBuffer, sizeof(hitBuffer), 
+                                         "H|%llu|%llu|%llu|%d|%llu",
+                                         0ULL, *it, player.steamID.ConvertToUint64(), damage, timestamp);
+                                SendGameplayMessage(std::string(hitBuffer));
+
+                                if (enemy.health <= damage) { // Optimistic removal on client
+                                    game->GetEntityManager()->getEnemies().erase(*it);
+                                    it = enemyIds.erase(it);
+                                } else {
+                                    enemy.health -= damage; // Local prediction
+                                    ++it;
+                                }
                             }
                         } else {
                             ++it;
@@ -854,9 +959,8 @@ void NetworkManager::syncEntities(EntityManager* em) {
         Enemy& enemy = it->second;
         if (enemy.needsSync) {
             if (enemy.health <= 0) {
-                char buffer[128];
-                int bytes = snprintf(buffer, sizeof(buffer), "E|DEATH|%llu|%llu|%llu",
-                                     enemy.id, enemy.deathSequence, 0ULL); // killerID optional
+                char buffer[64];
+                int bytes = snprintf(buffer, sizeof(buffer), "E|REMOVE|%llu", enemy.id);
                 if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
                     broadcastMessage(std::string(buffer));
                 }
