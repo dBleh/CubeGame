@@ -1,6 +1,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#define GAME_ID "SteamGame_v1"
 // Screen dimensions
 #define SCREEN_WIDTH 1000
 #define SCREEN_HEIGHT 800

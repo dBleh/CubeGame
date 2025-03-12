@@ -2,49 +2,37 @@
 #define PLAYER_H
 
 #include <SFML/Graphics.hpp>
-#include "../Utils/Config.h"
-#include <steam/steam_api.h>
-#include <iostream>
+#include <steam/steam_api.h>  // Optional: if you want to associate a SteamID with the player
 
-/**
- * @brief Represents a player in the game.
- *
- * Stores graphical properties, positional data, health, and game-related stats.
- * Provides methods for initialization, movement, applying boosts, and shooting.
- */
-struct Player {
-    //-------------------------------------------------------------------------
-    // Graphical Data
-    //-------------------------------------------------------------------------
-    sf::RectangleShape shape; ///< Visual representation of the player.
+class Player {
+public:
+    // Default constructor with preset starting position, color, and movement speed.
+    Player();
+    // Constructor allowing to set starting position and color.
+    Player(const sf::Vector2f& startPosition, const sf::Color& color = sf::Color::Blue);
+    
+    // Update the player's state (handle movement).
+    void Update(float dt);
+    
+    // Get the player's current position.
+    sf::Vector2f GetPosition() const;
+    
+    // Set the player's position.
+    void SetPosition(const sf::Vector2f& pos);
+    
+    sf::RectangleShape& GetShape();
+    // Add a const overload for read-only access (used when drawing, etc.).
+    const sf::RectangleShape& GetShape() const;
 
-    //-------------------------------------------------------------------------
-    // Positional Data
-    //-------------------------------------------------------------------------
-    float x, y;                   ///< Logical position.
-    float renderedX, renderedY;   ///< Interpolated position for rendering.
-    float lastX, lastY;           ///< Previous position for interpolation.
-    float targetX, targetY;       ///< Target position for interpolation.
-    float interpolationTime;      ///< Elapsed time used for interpolation.
+    
+    // Set the movement speed.
+    void SetSpeed(float speed);
+    // Get the movement speed.
+    float GetSpeed() const;
 
-    //-------------------------------------------------------------------------
-    // Gameplay Properties
-    //-------------------------------------------------------------------------
-    int health = PLAYER_HEALTH;   ///< Player health.
-    CSteamID steamID;             ///< Unique Steam ID.
-    bool ready = false;           ///< Ready status in lobby.
-    bool isAlive = true;          ///< Alive flag.
-    int kills = 0;                ///< Kill count.
-    int money;                    ///< In-game currency.
-    float speed;                  ///< Movement speed.
-
-    //-------------------------------------------------------------------------
-    // Member Functions
-    //-------------------------------------------------------------------------
-    void initialize();                    ///< Set default values.
-    bool move(float dt);                  ///< Process movement input.
-    void applySpeedBoost(float boostAmount); ///< Apply a temporary speed boost.
-    void ShootBullet(class CubeGame* game);   ///< Fire a bullet (requires CubeGame context).
+private:
+    sf::RectangleShape shape;  // Represents the player as a cube.
+    float movementSpeed;       // Movement speed in pixels per second.
 };
 
 #endif // PLAYER_H

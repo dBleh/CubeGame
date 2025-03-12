@@ -170,7 +170,7 @@ void HUD::configureStoreHUD(const sf::Vector2u& winSize) {
 //-------------------------------------------------------------------------
 // HUD Refresh Methods
 //-------------------------------------------------------------------------
-void HUD::refreshHUDContent(GameState currentState, bool menuVisible, bool shopOpen, const sf::Vector2u& winSize, const Player& localPlayer) {
+/*void HUD::refreshHUDContent(GameState currentState, bool menuVisible, bool shopOpen, const sf::Vector2u& winSize, const Player& localPlayer) {
     // Update store elements if shop is open.
     if (shopOpen) {
         updateElementPosition("storeTitle", sf::Vector2f(0.5f * winSize.x - 100.f, 0.05f * winSize.y));
@@ -191,7 +191,8 @@ void HUD::refreshHUDContent(GameState currentState, bool menuVisible, bool shopO
     else
         updateText("pauseMenu", "");
 }
-
+*/
+/*
 void HUD::refreshGameInfo(const sf::Vector2u& winSize,
                           int currentLevel,
                           size_t enemyCount,
@@ -238,7 +239,8 @@ void HUD::refreshGameInfo(const sf::Vector2u& winSize,
     }
     updateText("scoreboard", scoreboard);
 }
-
+*/
+/*
 void HUD::updateScoreboard(const std::unordered_map<CSteamID, Player, CSteamIDHash>& players) {
     std::string scoreboard = "Scoreboard:\n";
     for (const auto& playerPair : players) {
@@ -252,3 +254,4 @@ void HUD::updateScoreboard(const std::unordered_map<CSteamID, Player, CSteamIDHa
     }
     updateText("scoreboard", scoreboard);
 }
+    */

@@ -1,0 +1,1 @@
+// Handles errors within the game, such as network failures, Steam API errors, or game crashes. Logs the error and optionally provides user-friendly error messages or attempts to recover from the error. 

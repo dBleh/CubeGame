@@ -4,7 +4,7 @@ project(CubeShooter)
 set(CMAKE_CXX_STANDARD 17)
 
 set(STEAM_SDK_DIR "C:/Users/dunca/Desktop/sdk")
-set(SFML_DIR "C:/Users/dunca/Desktop/SFML-2.6.1")
+set(SFML_DIR "C:/SFML/SFML-2.5.1")
 # Include directories
 include_directories(
     ${STEAM_SDK_DIR}/public
@@ -23,20 +23,21 @@ link_directories(${SFML_DIR}/lib)
 # Source files
 add_executable(CubeShooter
     src/main.cpp
-    src/Core/CubeGame.cpp
-    src/Entities/Player.cpp
-    src/Entities/Enemy.cpp
-    src/Entities/Bullet.cpp
-    src/Entities/EntityManager.cpp
-    src/Hud/Hud.cpp
-    src/Networking/SteamManager.cpp
-    src/Networking/NetworkManager.cpp
-    src/States/MainMenuState.cpp
-    src/States/LobbyState.cpp
-    src/States/GameplayState.cpp
-    src/States/GameOverState.cpp
-    src/States/LobbyCreationState.cpp
-    src/States/LobbySearchState.cpp
+    src/Game.cpp                       # Assuming CubeGame.cpp is renamed to Game.cpp per your new structure
+    src/entities/Player.cpp            # Matches src/entities/Player.h
+    #src/entities/Enemy.cpp             # Matches src/entities/Enemy.h
+    #src/entities/Bullet.cpp            # Not explicitly listed, assuming it goes in src/entities/
+    #src/entities/EntityManager.cpp     # Not explicitly listed, assuming it goes in src/entities/
+    src/Hud/Hud.cpp                    # Matches src/Hud/Hud.h
+    #src/network/SteamManager.cpp       # Moved to src/network/ from src/Networking/
+    src/network/NetworkManager.cpp     # Matches src/network/NetworkManager.h
+    src/states/MainMenuState.cpp       # Matches src/states/MainMenuState.h
+    src/states/LobbyState.cpp          # Not listed but assumed in src/states/
+    #src/states/GameplayState.cpp       # Matches src/states/PlayingState.h (assuming renamed)
+    #src/states/GameOverState.cpp       # Matches src/states/GameOverState.h
+    src/states/LobbyCreationState.cpp  # Not listed but assumed in src/states/
+    src/states/LobbySearchState.cpp    # Not listed but assumed in src/states/
+    src/utils/MessageHandler.cpp
 )
 # Link libraries
 target_link_libraries(CubeShooter

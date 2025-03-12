@@ -1,14 +1,7 @@
-#include "Core/CubeGame.h"
-#include <iostream>
+#include "Game.h"
 
 int main() {
-    std::cout << "[DEBUG] Starting CubeShooter..." << std::endl;
-    
-    CubeGame game;
-    std::cout << "[DEBUG] Game object created, calling Run()..." << std::endl;
-    
+    Game game;
     game.Run();
-    
-    std::cout << "[DEBUG] Game loop exited normally." << std::endl;
     return 0;
 }

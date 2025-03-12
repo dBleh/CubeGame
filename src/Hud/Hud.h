@@ -1,13 +1,13 @@
 #ifndef HUD_H
 #define HUD_H
-
 #include <SFML/Graphics.hpp>
 #include <string>
 #include <unordered_map>
-#include "../States/GameState.h"
-#include "../Utils/Config.h"
-#include "../Entities/Player.h"
-#include "../Utils/SteamHelpers.h"
+#include "../GameState.h"
+#include "../utils/SteamHelpers.h"
+#include "../utils/Config.h"
+#include "../entities/Player.h"
+
 
 /**
  * @brief Class for managing Heads-Up Display (HUD) elements.
@@ -50,11 +50,8 @@ public:
      */
     bool isFullyLoaded() const;
 
-    /**
-     * @brief Updates the scoreboard with current player stats.
-     * @param players Map of players.
-     */
-    void updateScoreboard(const std::unordered_map<CSteamID, Player, CSteamIDHash>& players);
+  
+    //void updateScoreboard(const std::unordered_map<CSteamID, Player, CSteamIDHash>& players);
 
     /**
      * @brief Adds a HUD element.
@@ -74,21 +71,14 @@ public:
                     RenderMode mode = RenderMode::ScreenSpace,
                     bool hoverable = false);
 
-    /**
-     * @brief Refreshes game info on the HUD.
-     * @param winSize Window size.
-     * @param currentLevel Current level.
-     * @param enemyCount Number of enemies.
-     * @param localPlayer Reference to local player.
-     * @param nextLevelTimer Timer for next wave.
-     * @param players Map of players.
-     */
-    void refreshGameInfo(const sf::Vector2u& winSize,
+    
+    /*void refreshGameInfo(const sf::Vector2u& winSize,
                          int currentLevel,
                          size_t enemyCount,
                          const Player& localPlayer,
                          float nextLevelTimer,
                          const std::unordered_map<CSteamID, Player, CSteamIDHash>& players);
+                         */
 
     /**
      * @brief Updates the text content of a HUD element.
@@ -137,15 +127,7 @@ public:
      */
     void configureStoreHUD(const sf::Vector2u& winSize);
 
-    /**
-     * @brief Refreshes HUD content based on the current state.
-     * @param currentState Current game state.
-     * @param menuVisible Whether the pause menu is visible.
-     * @param shopOpen Whether the store is open.
-     * @param winSize Window size.
-     * @param localPlayer Reference to local player.
-     */
-    void refreshHUDContent(GameState currentState, bool menuVisible, bool shopOpen, const sf::Vector2u& winSize, const Player& localPlayer);
+    //void refreshHUDContent(GameState currentState, bool menuVisible, bool shopOpen, const sf::Vector2u& winSize, const Player& localPlayer);
 
 private:
     sf::Font& m_font; ///< Reference to the font used for HUD elements.
