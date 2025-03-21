@@ -1,0 +1,765 @@
+// COLLISION SYSTEM OVERVIEW
+// This file provides a comprehensive overview of the collision detection and resolution system
+
+// ==================================================================================
+// PhysicsSystem.h - Collision-Related Data Structures and Function Declarations
+// ==================================================================================
+
+/**
+ * @class CollisionPair
+ * @brief Structure representing a collision between two objects
+ */
+struct CollisionPair {
+    std::shared_ptr<GameObject> objectA;
+    std::shared_ptr<GameObject> objectB;
+    sf::Vector3f collisionNormal;
+    float penetrationDepth;
+    
+    CollisionPair(std::shared_ptr<GameObject> a, std::shared_ptr<GameObject> b, 
+                  const sf::Vector3f& normal, float depth)
+        : objectA(a), objectB(b), collisionNormal(normal), penetrationDepth(depth) {}
+};
+
+/**
+ * @enum CollisionLayer
+ * @brief Enum defining different collision layers
+ */
+enum class CollisionLayer {
+    Default = 0,
+    Player = 1,
+    Environment = 2,
+    Trigger = 3,
+    Pickup = 4,
+    // Add more layers as needed
+    
+    Count // Always keep this at the end to get the total number of layers
+};
+
+// PhysicsSystem Class Collision Methods
+void detectCollisions();
+void resolveCollisions(float interpolationFactor = 1.0f);
+
+// Broadphase collision check (fast but approximate)
+bool broadPhaseCheck(const sf::Vector3f& playerPos, float playerRadius, float playerHeight, 
+                    const std::shared_ptr<GameObject>& object);
+
+// Narrowphase collision check (accurate but slower)
+bool narrowPhaseCheck(const sf::Vector3f& playerPos, float playerRadius, float playerHeight, 
+                     const std::shared_ptr<GameObject>& object, 
+                     sf::Vector3f& collisionNormal, float& penetrationDepth);
+
+// Player-specific collision resolution
+void resolvePlayerCollision(std::shared_ptr<GameObject> object, const sf::Vector3f& normal, 
+                          float penetrationDepth, float interpolationFactor = 1.0f);
+
+// Object-to-object collision resolution (for future implementation)
+void resolveObjectCollision(std::shared_ptr<GameObject> objectA, std::shared_ptr<GameObject> objectB, 
+                          const sf::Vector3f& normal, float penetrationDepth);
+
+// Collision helpers
+bool canLayersCollide(CollisionLayer layerA, CollisionLayer layerB) const;
+bool checkCollision(std::shared_ptr<GameObject> objectA, std::shared_ptr<GameObject> objectB, 
+                    sf::Vector3f& normal, float& penetrationDepth);
+
+// Collision layer management
+void addCollider(std::shared_ptr<GameObject> object, CollisionLayer layer = CollisionLayer::Default);
+void removeCollider(GameObject* object);
+void clearColliders();
+void setLayerCollision(CollisionLayer layerA, CollisionLayer layerB, bool canCollide);
+
+// Raycast
+std::shared_ptr<GameObject> raycast(const sf::Vector3f& origin, const sf::Vector3f& direction, 
+                                   float maxDistance, CollisionLayer layer = CollisionLayer::Default);
+
+// ==================================================================================
+// PhysicsSystem.cpp - Collision Detection Implementation
+// ==================================================================================
+
+// Layer Collision Matrix Setup
+void PhysicsSystem::initialize() {
+    // Initialize the layer collision matrix
+    // By default, all layers collide with each other
+    for (int i = 0; i < static_cast<int>(CollisionLayer::Count); ++i) {
+        for (int j = 0; j < static_cast<int>(CollisionLayer::Count); ++j) {
+            m_layerCollisionMatrix[i][j] = true;
+        }
+    }
+    
+    // Triggers don't collide with each other
+    setLayerCollision(CollisionLayer::Trigger, CollisionLayer::Trigger, false);
+    
+    // Pickups don't collide with triggers
+    setLayerCollision(CollisionLayer::Pickup, CollisionLayer::Trigger, false);
+    
+    // Clear any existing colliders
+    clearColliders();
+    
+    std::cout << "[INFO] PhysicsSystem initialized" << std::endl;
+}
+
+// Layer Collision Setup
+void PhysicsSystem::setLayerCollision(CollisionLayer layerA, CollisionLayer layerB, bool canCollide) {
+    int a = static_cast<int>(layerA);
+    int b = static_cast<int>(layerB);
+    
+    if (a >= 0 && a < static_cast<int>(CollisionLayer::Count) &&
+        b >= 0 && b < static_cast<int>(CollisionLayer::Count)) {
+        // Set both directions since collision matrix is symmetric
+        m_layerCollisionMatrix[a][b] = canCollide;
+        m_layerCollisionMatrix[b][a] = canCollide;
+    }
+}
+
+bool PhysicsSystem::canLayersCollide(CollisionLayer layerA, CollisionLayer layerB) const {
+    int a = static_cast<int>(layerA);
+    int b = static_cast<int>(layerB);
+    
+    if (a >= 0 && a < static_cast<int>(CollisionLayer::Count) &&
+        b >= 0 && b < static_cast<int>(CollisionLayer::Count)) {
+        return m_layerCollisionMatrix[a][b];
+    }
+    
+    // Default to no collision if invalid layers
+    return false;
+}
+
+// Collision Detection Main Function - Entry point for collision detection
+void PhysicsSystem::detectCollisions() {
+    // Clear previous collisions
+    m_collisions.clear();
+    
+    if (m_player) {
+        // Check player against all collidable objects
+        sf::Vector3f playerPos = m_player->getPosition();
+        float playerRadius = m_player->getConfig().getPlayerRadius();
+        float playerHeight = m_player->getConfig().getPlayerHeight();
+        
+        // First, do a broadphase check to find potentially colliding objects
+        std::vector<std::shared_ptr<GameObject>> potentialColliders;
+        
+        // Check against each layer
+        for (const auto& layerPair : m_collisionLayers) {
+            CollisionLayer layer = layerPair.first;
+            
+            // Skip layers that don't collide with player
+            if (!canLayersCollide(CollisionLayer::Player, layer)) {
+                continue;
+            }
+            
+            const auto& objects = layerPair.second;
+            
+            for (const auto& object : objects) {
+                if (object->isEnabled()) {
+                    // Broad phase check - AABB versus AABB
+                    if (broadPhaseCheck(playerPos, playerRadius, playerHeight, object)) {
+                        potentialColliders.push_back(object);
+                    }
+                }
+            }
+        }
+        
+        // Now do narrow phase check on potential colliders
+        for (const auto& object : potentialColliders) {
+            sf::Vector3f collisionNormal;
+            float penetrationDepth;
+            
+            if (narrowPhaseCheck(playerPos, playerRadius, playerHeight, object, collisionNormal, penetrationDepth)) {
+                // Store collision with calculated penetration depth
+                m_collisions.emplace_back(nullptr, object, collisionNormal, penetrationDepth);
+            }
+        }
+    }
+    
+    // Object-to-object collisions (for future implementation)
+    // This would check each layer against other layers it can collide with
+    // and store any collisions in m_collisions
+}
+
+// Broad Phase Collision Check - Fast initial filter
+bool PhysicsSystem::broadPhaseCheck(const sf::Vector3f& playerPos, float playerRadius, float playerHeight, 
+                                  const std::shared_ptr<GameObject>& object) {
+    // For cubic objects, do an AABB vs. capsule broad phase
+    SquareObject* squareObj = dynamic_cast<SquareObject*>(object.get());
+    if (squareObj) {
+        sf::Vector3f cubePos = squareObj->getPosition();
+        sf::Vector3f cubeSize = squareObj->getSize();
+        
+        // Calculate expanded AABB for player capsule
+        float capsuleRadius = playerRadius * 1.1f; // Add 10% margin
+        float totalPlayerHeight = playerHeight + 2 * playerRadius;
+        
+        // Calculate player AABB
+        float playerMinX = playerPos.x - capsuleRadius;
+        float playerMaxX = playerPos.x + capsuleRadius;
+        float playerMinY = playerPos.y - playerRadius; // Bottom hemisphere
+        float playerMaxY = playerPos.y + playerHeight + playerRadius; // Top hemisphere
+        float playerMinZ = playerPos.z - capsuleRadius;
+        float playerMaxZ = playerPos.z + capsuleRadius;
+        
+        // Calculate cube AABB
+        float cubeMinX = cubePos.x - cubeSize.x/2;
+        float cubeMaxX = cubePos.x + cubeSize.x/2;
+        float cubeMinY = cubePos.y - cubeSize.y/2;
+        float cubeMaxY = cubePos.y + cubeSize.y/2;
+        float cubeMinZ = cubePos.z - cubeSize.z/2;
+        float cubeMaxZ = cubePos.z + cubeSize.z/2;
+        
+        // Check for AABB overlap
+        if (playerMaxX < cubeMinX || playerMinX > cubeMaxX) return false;
+        if (playerMaxY < cubeMinY || playerMinY > cubeMaxY) return false;
+        if (playerMaxZ < cubeMinZ || playerMinZ > cubeMaxZ) return false;
+        
+        return true;
+    }
+    
+    // For non-cubic objects, defer to their collision check
+    return true;
+}
+
+// Narrow Phase Collision Check - Accurate collision detection
+bool PhysicsSystem::narrowPhaseCheck(const sf::Vector3f& playerPos, float playerRadius, float playerHeight, 
+                                   const std::shared_ptr<GameObject>& object, 
+                                   sf::Vector3f& collisionNormal, float& penetrationDepth) {
+    // Perform precise collision detection between player capsule and object
+    bool collision = object->checkCollision(playerPos, playerRadius, playerHeight, collisionNormal);
+    
+    if (collision) {
+        // Calculate penetration depth based on the type of object
+        SquareObject* squareObj = dynamic_cast<SquareObject*>(object.get());
+        if (squareObj) {
+            sf::Vector3f cubePos = squareObj->getPosition();
+            sf::Vector3f cubeSize = squareObj->getSize();
+            
+            // Calculate the distance from player to cube surface in the direction of the normal
+            sf::Vector3f playerToObject = cubePos - playerPos;
+            float dotProduct = PhysicsUtils::dot(playerToObject, collisionNormal);
+            
+            // For penetration calculation, consider if the normal is pointing up/down (vertical collision)
+            if ((std::abs)(collisionNormal.y) > 0.7f) {
+                // Vertical collision - use the distance to the appropriate face
+                if (collisionNormal.y > 0) { // Player is below cube
+                    float cubeBottom = cubePos.y - cubeSize.y/2;
+                    float playerTop = playerPos.y + playerHeight + playerRadius;
+                    penetrationDepth = playerTop - cubeBottom;
+                } else { // Player is above cube
+                    float cubeTop = cubePos.y + cubeSize.y/2;
+                    float playerBottom = playerPos.y - playerRadius;
+                    penetrationDepth = cubeTop - playerBottom;
+                }
+            } else {
+                // Horizontal collision - use the radius for penetration calculation
+                penetrationDepth = playerRadius - (std::abs)(dotProduct);
+            }
+            
+            // Apply a minimum penetration depth to avoid jitter
+            penetrationDepth = (std::max)(penetrationDepth, 0.001f);
+            
+            return true;
+        } else {
+            // For non-cubic objects, use a default penetration depth
+            penetrationDepth = playerRadius * 0.3f;
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+// ==================================================================================
+// PhysicsSystem.cpp - Collision Resolution Implementation
+// ==================================================================================
+
+// Main Collision Resolution Entry Point
+void PhysicsSystem::resolveCollisions(float interpolationFactor) {
+    // Group collisions by object for better handling
+    std::unordered_map<std::shared_ptr<GameObject>, std::vector<sf::Vector3f>> collisionNormals;
+    std::unordered_map<std::shared_ptr<GameObject>, std::vector<float>> penetrationDepths;
+    
+    // First, group all collision data
+    for (const auto& collision : m_collisions) {
+        if (!collision.objectA) { // Player-object collision
+            collisionNormals[collision.objectB].push_back(collision.collisionNormal);
+            penetrationDepths[collision.objectB].push_back(collision.penetrationDepth);
+        }
+    }
+    
+    // Handle player collisions with aggregated data
+    if (m_player) {
+        for (const auto& pair : collisionNormals) {
+            auto object = pair.first;
+            const auto& normals = pair.second;
+            const auto& depths = penetrationDepths[object];
+            
+            // Compute average normal and maximum penetration for this object
+            sf::Vector3f avgNormal(0, 0, 0);
+            float maxDepth = 0;
+            
+            for (size_t i = 0; i < normals.size(); i++) {
+                avgNormal.x += normals[i].x;
+                avgNormal.y += normals[i].y;
+                avgNormal.z += normals[i].z;
+                maxDepth = (std::max)(maxDepth, depths[i]);
+            }
+            
+            // Normalize the average normal
+            float length = std::sqrt(avgNormal.x * avgNormal.x + 
+                                    avgNormal.y * avgNormal.y + 
+                                    avgNormal.z * avgNormal.z);
+            
+            if (length > 0.0001f) {
+                avgNormal.x /= length;
+                avgNormal.y /= length;
+                avgNormal.z /= length;
+                
+                // Resolve this collision with the aggregated data
+                resolvePlayerCollision(object, avgNormal, maxDepth, interpolationFactor);
+            }
+        }
+    }
+    
+    // Handle object-to-object collisions
+    for (const auto& collision : m_collisions) {
+        // If both objects are non-null, it's an object-object collision
+        if (collision.objectA && collision.objectB) {
+            resolveObjectCollision(collision.objectA, collision.objectB, 
+                                  collision.collisionNormal, collision.penetrationDepth);
+        }
+    }
+}
+
+// Player-Specific Collision Resolution
+void PhysicsSystem::resolvePlayerCollision(std::shared_ptr<GameObject> object, 
+                                         const sf::Vector3f& normal, 
+                                         float penetrationDepth,
+                                         float interpolationFactor) {
+    if (!m_player || !object) return;
+    
+    // Get current player state
+    sf::Vector3f playerPos = m_player->getPosition();
+    sf::Vector3f playerVel = m_player->getVelocity();
+    
+    // Get cube properties for better collision handling
+    SquareObject* squareObj = dynamic_cast<SquareObject*>(object.get());
+    if (squareObj) {
+        sf::Vector3f cubePos = object->getPosition();
+        sf::Vector3f cubeSize = squareObj->getSize();
+        
+        // Check if player is inside the cube (severe penetration)
+        float minX = cubePos.x - (cubeSize.x / 2.0f);
+        float maxX = cubePos.x + (cubeSize.x / 2.0f);
+        float minY = cubePos.y - (cubeSize.y / 2.0f);
+        float maxY = cubePos.y + (cubeSize.y / 2.0f);
+        float minZ = cubePos.z - (cubeSize.z / 2.0f);
+        float maxZ = cubePos.z + (cubeSize.z / 2.0f);
+        
+        // Detect if player's center is inside the cube (indication of severe penetration)
+        bool insideCube = (playerPos.x >= minX && playerPos.x <= maxX &&
+                          playerPos.y >= minY && playerPos.y <= maxY &&
+                          playerPos.z >= minZ && playerPos.z <= maxZ);
+        
+        // If player has severely penetrated the cube, use the previous position instead
+        if (insideCube) {
+            // Move back to previous position
+            m_player->setPosition(m_prevPlayerPos);
+            
+            // Zero velocity to stop motion causing the penetration
+            sf::Vector3f zeroVel(0.0f, m_prevPlayerVel.y, 0.0f); // Preserve vertical motion
+            m_player->setVelocity(zeroVel);
+            
+            if (m_debugVisualization) {
+                std::cout << "[DEBUG] Severe penetration detected, resetting position" << std::endl;
+            }
+            
+            return;
+        }
+        
+        // Check if this is a top collision - standing on something (normal pointing up)
+        if (normal.y > 0.7f) {
+            // Calculate the cube's top surface Y position
+            float cubeTopY = cubePos.y + (cubeSize.y / 2.0f);
+            float playerBottom = playerPos.y - m_player->getConfig().getPlayerRadius();
+            
+            // Only snap to top if player is above the cube top or very close to it
+            if (playerBottom <= cubeTopY + 0.15f) {
+                // Position the player exactly on top of the cube with a small offset
+                playerPos.y = cubeTopY + m_player->getConfig().getPlayerRadius() + 0.01f;
+                
+                // Set the player's position - no smoothing here to avoid jitter
+                m_player->setPosition(playerPos);
+                
+                // Zero out the y velocity if falling
+                if (playerVel.y < 0) {
+                    playerVel.y = 0.0f;
+                    m_player->setVelocity(playerVel);
+                }
+                
+                // Notify the player that they're now grounded
+                m_player->setGrounded(true);
+                
+                return; // We've handled the top collision, no need for further processing
+            }
+        }
+        // Check if this is a bottom collision (normal pointing down, y close to -1.0)
+        else if (normal.y < -0.7f) {
+            // Player hit their head on something
+            if (playerVel.y > 0) {
+                playerVel.y = 0.0f;
+                m_player->setVelocity(playerVel);
+            }
+            
+            // Apply a direct position correction - no smoothing to avoid jitter
+            playerPos.y = playerPos.y + normal.y * penetrationDepth * 1.1f;
+            m_player->setPosition(playerPos);
+            
+            return; // We've handled the ceiling collision
+        }
+    }
+    
+    // For side collisions, handle velocity and penetration
+    // Check if moving into the object
+    float velDotNormal = PhysicsUtils::dot(playerVel, normal);
+    
+    if (velDotNormal < 0) {
+        // Calculate the reflection vector for a more natural bounce effect
+        sf::Vector3f reflectionVector = PhysicsUtils::reflect(playerVel, normal);
+        
+        // Apply a friction/damping factor to the reflection
+        float frictionFactor = m_player->isGrounded() ? 0.2f : 0.8f;
+        
+        // Mix the reflected velocity with zeroing the normal component based on friction
+        sf::Vector3f newVelocity;
+        newVelocity.x = playerVel.x - velDotNormal * normal.x * (1.0f + frictionFactor);
+        newVelocity.y = playerVel.y - velDotNormal * normal.y * (1.0f + frictionFactor);
+        newVelocity.z = playerVel.z - velDotNormal * normal.z * (1.0f + frictionFactor);
+        
+        m_player->setVelocity(newVelocity);
+    }
+    
+    // Calculate the minimum correction needed to resolve penetration
+    float correctionFactor = 1.01f; // Just a bit more than 1 to ensure separation
+    
+    sf::Vector3f positionCorrection = playerPos;
+    positionCorrection.x += normal.x * penetrationDepth * correctionFactor;
+    positionCorrection.y += normal.y * penetrationDepth * correctionFactor;
+    positionCorrection.z += normal.z * penetrationDepth * correctionFactor;
+    
+    // Apply smoothing to the position correction for more natural feeling
+    if (interpolationFactor < 1.0f) {
+        // Interpolate between current position and corrected position
+        sf::Vector3f smoothedPosition;
+        smoothedPosition.x = playerPos.x + (positionCorrection.x - playerPos.x) * interpolationFactor;
+        smoothedPosition.y = playerPos.y + (positionCorrection.y - playerPos.y) * interpolationFactor;
+        smoothedPosition.z = playerPos.z + (positionCorrection.z - playerPos.z) * interpolationFactor;
+        
+        m_player->setPosition(smoothedPosition);
+    } else {
+        // Update position directly if no interpolation needed
+        m_player->setPosition(positionCorrection);
+    }
+    
+    // Debug output if enabled
+    if (m_debugVisualization) {
+        std::cout << "[DEBUG] Collision with " << object->getName() 
+                  << ", normal: (" << normal.x << ", " 
+                  << normal.y << ", " << normal.z << ")" << std::endl;
+    }
+}
+
+// Object-to-Object Collision Resolution
+void PhysicsSystem::resolveObjectCollision(std::shared_ptr<GameObject> objectA, 
+                                         std::shared_ptr<GameObject> objectB, 
+                                         const sf::Vector3f& normal, 
+                                         float penetrationDepth) {
+    // This method resolves collisions between two generic game objects
+    // It implements a basic physics response model
+    
+    // Make sure both objects exist
+    if (!objectA || !objectB) {
+        return;
+    }
+    
+    // Get object positions
+    sf::Vector3f posA = objectA->getPosition();
+    sf::Vector3f posB = objectB->getPosition();
+    
+    // Calculate separation vector to resolve penetration
+    sf::Vector3f separationVector = normal * penetrationDepth;
+    
+    // In a full physics system, you would consider:
+    // 1. Mass of each object
+    // 2. Whether objects are static or dynamic
+    // 3. Conservation of momentum and energy
+    // 4. Friction and restitution properties
+    
+    // For this simple implementation, we'll just move both objects equally
+    // For a more realistic system, you would consider the mass ratio
+    
+    // Move objectA away from objectB
+    posA.x -= separationVector.x * 0.5f;
+    posA.y -= separationVector.y * 0.5f;
+    posA.z -= separationVector.z * 0.5f;
+    
+    // Move objectB away from objectA
+    posB.x += separationVector.x * 0.5f;
+    posB.y += separationVector.y * 0.5f;
+    posB.z += separationVector.z * 0.5f;
+    
+    // Update positions
+    objectA->setPosition(posA);
+    objectB->setPosition(posB);
+    
+    // Here you would also handle velocity changes for dynamic objects
+    // For example, implementing elastic or inelastic collisions
+    // This would require velocity properties on the GameObject class
+    
+    // For debugging
+    if (m_debugVisualization) {
+        std::cout << "[DEBUG] Resolved collision between " << objectA->getName() 
+                  << " and " << objectB->getName() 
+                  << ", penetration: " << penetrationDepth << std::endl;
+    }
+}
+
+// General Object Collision Check
+bool PhysicsSystem::checkCollision(std::shared_ptr<GameObject> objectA, 
+                               std::shared_ptr<GameObject> objectB, 
+                               sf::Vector3f& normal, 
+                               float& penetrationDepth) {
+    // This method checks for collisions between two arbitrary game objects
+    // It's mostly intended for object-to-object collisions, rather than player-object collisions
+    
+    // First, check if both objects exist and are enabled
+    if (!objectA || !objectB || !objectA->isEnabled() || !objectB->isEnabled()) {
+        return false;
+    }
+    
+    // For cubic objects, we can do a specialized cubic collision check
+    SquareObject* squareA = dynamic_cast<SquareObject*>(objectA.get());
+    SquareObject* squareB = dynamic_cast<SquareObject*>(objectB.get());
+    
+    if (squareA && squareB) {
+        // Box-box collision
+        sf::Vector3f posA = objectA->getPosition();
+        sf::Vector3f posB = objectB->getPosition();
+        sf::Vector3f sizeA = squareA->getSize();
+        sf::Vector3f sizeB = squareB->getSize();
+        
+        // Calculate box extents
+        float halfWidthA = sizeA.x / 2.0f;
+        float halfHeightA = sizeA.y / 2.0f;
+        float halfDepthA = sizeA.z / 2.0f;
+        
+        float halfWidthB = sizeB.x / 2.0f;
+        float halfHeightB = sizeB.y / 2.0f;
+        float halfDepthB = sizeB.z / 2.0f;
+        
+        // Calculate overlap on each axis
+        float overlapX = halfWidthA + halfWidthB - std::abs(posB.x - posA.x);
+        float overlapY = halfHeightA + halfHeightB - std::abs(posB.y - posA.y);
+        float overlapZ = halfDepthA + halfDepthB - std::abs(posB.z - posA.z);
+        
+        // If there's overlap on all axes, we have a collision
+        if (overlapX > 0 && overlapY > 0 && overlapZ > 0) {
+            // Find the axis with the smallest overlap
+            // That's the direction we want to push along
+            penetrationDepth = overlapX;
+            normal = sf::Vector3f((posB.x > posA.x) ? 1.0f : -1.0f, 0.0f, 0.0f);
+            
+            if (overlapY < penetrationDepth) {
+                penetrationDepth = overlapY;
+                normal = sf::Vector3f(0.0f, (posB.y > posA.y) ? 1.0f : -1.0f, 0.0f);
+            }
+            
+            if (overlapZ < penetrationDepth) {
+                penetrationDepth = overlapZ;
+                normal = sf::Vector3f(0.0f, 0.0f, (posB.z > posA.z) ? 1.0f : -1.0f);
+            }
+            
+            return true;
+        }
+        
+        return false;
+    }
+    
+    // If one of the objects is a SquareObject, use its checkCollision method
+    if (squareA) {
+        // Use the position and bounding volume of objectB
+        // Note: This is a simplified approach and assumes objectB has a spherical collision shape
+        // In a real implementation, you would handle different collision shapes appropriately
+        sf::Vector3f posB = objectB->getPosition();
+        
+        // Use an approximate radius and height for objectB
+        float radiusB = 0.5f;  // Default radius if unknown
+        float heightB = 1.0f;  // Default height if unknown
+        
+        return squareA->checkCollision(posB, radiusB, heightB, normal);
+    }
+    else if (squareB) {
+        // Use the position and bounding volume of objectA
+        sf::Vector3f posA = objectA->getPosition();
+        
+        // Use an approximate radius and height for objectA
+        float radiusA = 0.5f;  // Default radius if unknown
+        float heightA = 1.0f;  // Default height if unknown
+        
+        // Get collision result
+        bool result = squareB->checkCollision(posA, radiusA, heightA, normal);
+        
+        // If collision occurred, we need to invert the normal since objects are swapped
+        if (result) {
+            normal.x = -normal.x;
+            normal.y = -normal.y;
+            normal.z = -normal.z;
+        }
+        
+        return result;
+    }
+    
+    // Default case: we don't have specialized collision for these objects
+    // In a full implementation, you would implement a more generic collision system
+    // that can handle different types of collision shapes
+    return false;
+}
+
+// ==================================================================================
+// GameObject.h / GameObject.cpp - Base Collision Interface
+// ==================================================================================
+
+// Base GameObject collision check - this is virtual and overridden by subclasses
+bool GameObject::checkCollision(const sf::Vector3f& point, float radius, float height, sf::Vector3f& collisionNormal) const 
+{
+    // Base GameObject has no collision
+    return false;
+}
+
+// ==================================================================================
+// SquareObject.cpp - Cube Collision Implementation
+// ==================================================================================
+
+bool SquareObject::checkCollision(const sf::Vector3f& point, float radius, float height, sf::Vector3f& collisionNormal) const
+{
+    // Apply object's rotation if needed - NOTE: In a full implementation, you should apply
+    // rotation matrix to convert point into object's local space for more accurate collision.
+    // For this example, we'll assume axis-aligned boxes for simplicity.
+    
+    // Calculate boundaries of the box
+    float minX = m_position.x - m_size.x / 2.0f;
+    float maxX = m_position.x + m_size.x / 2.0f;
+    float minY = m_position.y - m_size.y / 2.0f;
+    float maxY = m_position.y + m_size.y / 2.0f;
+    float minZ = m_position.z - m_size.z / 2.0f;
+    float maxZ = m_position.z + m_size.z / 2.0f;
+    
+    // Calculate player's capsule boundaries (treating it as a vertical capsule)
+    float playerMinY = point.y - radius;  // Bottom hemisphere center
+    float playerMaxY = point.y + height + radius;  // Top hemisphere center
+    
+    // First, do a quick AABB check to see if there's any possibility of collision
+    if (point.x + radius < minX || point.x - radius > maxX ||
+        playerMaxY < minY || playerMinY > maxY ||
+        point.z + radius < minZ || point.z - radius > maxZ) {
+        return false;
+    }
+    
+    // For more accurate collision, we'll use a capsule vs. box test
+    // This is a simplified version that checks for six types of collisions:
+    // 1. Axis faces (6 cases)
+    // 2. Edges (12 cases, simplified)
+    // 3. Vertices (8 cases, simplified)
+    
+    // Helper variables
+    float capsuleRadius = radius;
+    float capsuleHalfHeight = height / 2.0f;
+    sf::Vector3f capsuleCenter(point.x, point.y + capsuleHalfHeight, point.z); // Center of capsule
+    
+    // Compute the closest point on the box to the capsule center
+    sf::Vector3f closestPoint;
+    closestPoint.x = (std::max)(minX, (std::min)(capsuleCenter.x, maxX));
+    closestPoint.y = (std::max)(minY, (std::min)(capsuleCenter.y, maxY));
+    closestPoint.z = (std::max)(minZ, (std::min)(capsuleCenter.z, maxZ));
+    
+    // Calculate the vector from the capsule center to the closest box point
+    sf::Vector3f centerToClosest(
+        closestPoint.x - capsuleCenter.x,
+        closestPoint.y - capsuleCenter.y,
+        closestPoint.z - capsuleCenter.z
+    );
+    
+    // Calculate square distance
+    float squareDistance = centerToClosest.x * centerToClosest.x +
+                           centerToClosest.y * centerToClosest.y +
+                           centerToClosest.z * centerToClosest.z;
+    
+    // Capsule line segment endpoints
+    sf::Vector3f capsuleTop(capsuleCenter.x, capsuleCenter.y + capsuleHalfHeight, capsuleCenter.z);
+    sf::Vector3f capsuleBottom(capsuleCenter.x, capsuleCenter.y - capsuleHalfHeight, capsuleCenter.z);
+    
+    // Check distance to capsule line segment
+    // Project the closest point onto the capsule axis
+    float dot = (closestPoint.y - capsuleBottom.y) / (capsuleTop.y - capsuleBottom.y);
+    dot = (std::max)(0.0f, (std::min)(1.0f, dot)); // Clamp to [0, 1]
+    
+    // Calculate the closest point on the capsule axis
+    sf::Vector3f axisPoint(
+        capsuleBottom.x,
+        capsuleBottom.y + dot * (capsuleTop.y - capsuleBottom.y),
+        capsuleBottom.z
+    );
+    
+    // Calculate distance from axisPoint to closestPoint
+    sf::Vector3f axisToClosest(
+        closestPoint.x - axisPoint.x,
+        closestPoint.y - axisPoint.y,
+        closestPoint.z - axisPoint.z
+    );
+    
+    float axisDistanceSquared = axisToClosest.x * axisToClosest.x +
+                               axisToClosest.y * axisToClosest.y +
+                               axisToClosest.z * axisToClosest.z;
+    
+    // If the distance is less than the radius, we have a collision
+    if (axisDistanceSquared < capsuleRadius * capsuleRadius) {
+        // Calculate penetration depth
+        float penetration = capsuleRadius - sqrt(axisDistanceSquared);
+        
+        // Calculate normal - from closestPoint to axisPoint
+        if (axisDistanceSquared > 0.0001f) {
+            float invDist = 1.0f / sqrt(axisDistanceSquared);
+            collisionNormal.x = axisToClosest.x * -invDist; // Invert direction to point outward
+            collisionNormal.y = axisToClosest.y * -invDist;
+            collisionNormal.z = axisToClosest.z * -invDist;
+        } else {
+            // If points are too close, use the vector from box center to capsule center
+            sf::Vector3f boxCenter(
+                (minX + maxX) / 2.0f,
+                (minY + maxY) / 2.0f,
+                (minZ + maxZ) / 2.0f
+            );
+            
+            sf::Vector3f boxToCapsule(
+                capsuleCenter.x - boxCenter.x,
+                capsuleCenter.y - boxCenter.y,
+                capsuleCenter.z - boxCenter.z
+            );
+            
+            float boxToCapsuleLength = sqrt(boxToCapsule.x * boxToCapsule.x +
+                                            boxToCapsule.y * boxToCapsule.y +
+                                            boxToCapsule.z * boxToCapsule.z);
+            
+            if (boxToCapsuleLength > 0.0001f) {
+                collisionNormal.x = boxToCapsule.x / boxToCapsuleLength;
+                collisionNormal.y = boxToCapsule.y / boxToCapsuleLength;
+                collisionNormal.z = boxToCapsule.z / boxToCapsuleLength;
+            } else {
+                // Default to pointing up if uncertain
+                collisionNormal.x = 0.0f;
+                collisionNormal.y = 1.0f;
+                collisionNormal.z = 0.0f;
+            }
+        }
+        
+        return true;
+    }
+    
+    return false;
+}

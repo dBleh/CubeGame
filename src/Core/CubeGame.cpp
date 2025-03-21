@@ -1,454 +1,286 @@
 #include "CubeGame.h"
-// Tea
-//==============================================================================
-// State Includes
-//==============================================================================
-#include "../States/State.h"
-#include "../States/MainMenuState.h"
-#include "../States/LobbyCreationState.h"
-#include "../States/LobbySearchState.h"
-#include "../States/LobbyState.h"
-#include "../States/GameplayState.h"
-#include "../States/GameOverState.h"
 
-//==============================================================================
-// Standard Library Includes
-//==============================================================================
-#include <memory>
-#include <cmath>
-#include <cstdio>    // for snprintf
+// Windows header must be included before OpenGL headers
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
+#include "../Entities/Player/Player.h"
+#include "../Entities/Objects/SquareObject.h"
+#include "../Physics/PhysicsSystem.h"
 #include <iostream>
 
-//==============================================================================
-// Game Identifier
-//==============================================================================
-const char* CubeGame::GAME_ID = "CubeShooter_v1";
-
-//------------------------------------------------------------------------------
-// Helper Functions
-//------------------------------------------------------------------------------
-
-// Resets the provided player's state to default starting values.
-void CubeGame::ResetPlayerState(Player& p) {
-    p.health = 100;
-    p.kills = 0;
-    p.money = 0;
-    p.ready = false;
-    // If the player's position is invalid (NaN), reset to screen center.
-    if (std::isnan(p.x)) p.x = SCREEN_WIDTH / 2.f;
-    if (std::isnan(p.y)) p.y = SCREEN_HEIGHT / 2.f;
-    p.renderedX = p.x;
-    p.renderedY = p.y;
-    p.lastX = p.x;
-    p.lastY = p.y;
-    p.targetX = p.x;
-    p.targetY = p.y;
-    p.speed = PLAYER_SPEED;
-    p.interpolationTime = 0.f;
-    p.shape.setPosition(SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f);
+CubeGame::CubeGame() 
+    : m_running(false)
+{
+    // Create player and physics system
+    m_player = std::make_unique<Player>();
+    m_physicsSystem = std::make_unique<PhysicsSystem>();
+    
+    // Create root game object
+    m_rootObject = std::make_shared<GameObject>("Root");
 }
 
-// Formats a string update for the given player state.
-// Returns an empty string if formatting fails.
-std::string CubeGame::FormatPlayerUpdate(const Player& p) {
-    char buffer[256];
-    int bytes = snprintf(buffer, sizeof(buffer),
-                         "P|%llu|%.1f|%.1f|%.1f|%.1f|%d|%d|%d|%d|%.1f|%d",
-                         p.steamID.ConvertToUint64(), p.x, p.y, p.renderedX, p.renderedY,
-                         p.health, p.kills, p.ready ? 1 : 0, p.money, p.speed, p.isAlive ? 1 : 0);
-    if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
-        std::string result(buffer);
-        return result;
+CubeGame::~CubeGame()
+{
+    // Clear game objects
+    if (m_rootObject) {
+        m_rootObject->clearChildren();
     }
-    std::cerr << "[ERROR] Failed to format player update for " << p.steamID.ConvertToUint64() << "\n";
-    return "";
+    m_gameObjects.clear();
 }
 
-//==============================================================================
-// CubeGame Member Functions
-//==============================================================================
-
-//--------------------------------------
-// Constructor & Initialization
-//--------------------------------------
-CubeGame::CubeGame() : hud(font) {
-    networkManager = new NetworkManager(debugMode, this);
-    entityManager = new EntityManager();
-    playerNetworkHandler = new PlayerNetworkHandler(this, networkManager);
-
-    if (!debugMode) {
-        if (!SteamAPI_Init()) {
-            std::cerr << "[ERROR] Steam API initialization failed!" << std::endl;
-            std::exit(1);
-        }
+bool CubeGame::initialize()
+{
+    // Create the window with OpenGL context
+    m_window.create(sf::VideoMode(1024, 768), "3D Cube Game with Player", 
+                    sf::Style::Default, sf::ContextSettings(24, 8, 4, 3, 3));
+    
+    if (!m_window.isOpen()) {
+        std::cerr << "[ERROR] Failed to create window!" << std::endl;
+        return false;
     }
-
-    window.create(sf::VideoMode(SCREEN_WIDTH, SCREEN_HEIGHT), "Multiplayer Lobby System");
-    if (!window.isOpen()) std::exit(1);
-    window.setFramerateLimit(60);
-
-    if (!font.loadFromFile("Roboto-Regular.ttf")) {
-        if(!font.loadFromFile("../../Roboto-Regular.ttf")){
-        std::cerr << "[ERROR] Failed to load font!" << std::endl;
-        }
-
+    
+    // Setup OpenGL state
+    setupOpenGL();
+    
+    // Initialize player
+    if (!m_player->initialize(&m_window)) {
+        std::cerr << "[ERROR] Failed to initialize player!" << std::endl;
+        return false;
     }
-
-    if (!debugMode && SteamUser() && SteamUser()->BLoggedOn()) {
-        localSteamID = SteamUser()->GetSteamID();
-    } else if (debugMode) {
-        localSteamID = CSteamID(76561198000000000ULL + 1);
-    }
-
-    entityManager->getPlayers()[localSteamID].initialize();
-    entityManager->getPlayers()[localSteamID].steamID = localSteamID;
-
-    ResetViewToDefault();
-    AdjustViewToWindow();
-    shootCooldown = 0.0f;
-    deltaTime = 0.0f;
-}
-
-// Returns the current GameplayState if active.
-GameplayState* CubeGame::GetGameplayState() {
-    return dynamic_cast<GameplayState*>(state.get());
-}
-
-//--------------------------------------
-// Destructor & Cleanup
-//--------------------------------------
-CubeGame::~CubeGame() {
-    delete networkManager;
-    delete entityManager;
-
-    if (inLobby)
-        SteamMatchmaking()->LeaveLobby(m_currentLobby);
-    SteamAPI_Shutdown();
-}
-
-//--------------------------------------
-// Accessor Methods
-//--------------------------------------
-float CubeGame::GetDeltaTime() const {
-    return deltaTime;
-}
-
-//--------------------------------------
-// Main Game Loop
-//--------------------------------------
-void CubeGame::Run() {
-    sf::Clock clock;
-    const float fixedDt = 1.0f / 60.0f;
-    float accumulator = 0.0f;
-
-    while (window.isOpen()) {
-        networkManager->processCallbacks();
-        networkManager->receiveMessages(); // Queue updates but don’t apply yet
-        networkManager->syncEntities(entityManager); // Flag entities for sync
-
-        float frameTime = clock.restart().asSeconds();
-        if (frameTime > 0.25f) frameTime = 0.25f;
-        accumulator += frameTime;
-
-        while (accumulator >= fixedDt) {
-            if (m_isHost) {
-                enemySyncTimer += fixedDt;
-                if (enemySyncTimer >= ENEMY_SYNC_INTERVAL) {
-                    networkManager->SyncEnemies();
-                    enemySyncTimer = 0.0f;
-                }
-            }
-            if (shootCooldown > 0) shootCooldown -= fixedDt;
-            if (state) state->Update(fixedDt); // Includes HandleCollisionsAndSync
-            accumulator -= fixedDt;
-        }
-        entityManager->applyQueuedUpdates(); // Apply updates after collisions
-
-        sf::Event event;
-        while (window.pollEvent(event)) {
-            ProcessEvents(event);
-            if (state) state->ProcessEvent(event);
-        }
-
-        switch (currentState) {
-            case GameState::MainMenu:
-                if (!state || !dynamic_cast<MainMenuState*>(state.get()))
-                    state = std::make_unique<MainMenuState>(this);
-                break;
-            case GameState::LobbyCreation:
-                if (!state || !dynamic_cast<LobbyCreationState*>(state.get()))
-                    state = std::make_unique<LobbyCreationState>(this);
-                break;
-            case GameState::LobbySearch:
-                if (!state || !dynamic_cast<LobbySearchState*>(state.get()))
-                    state = std::make_unique<LobbySearchState>(this);
-                break;
-            case GameState::Lobby:
-                if (!state || !dynamic_cast<LobbyState*>(state.get()))
-                    state = std::make_unique<LobbyState>(this);
-                break;
-            case GameState::Playing:
-                if (!state || !dynamic_cast<GameplayState*>(state.get()))
-                    state = std::make_unique<GameplayState>(this);
-                break;
-            case GameState::GameOver:
-                if (!state || !dynamic_cast<GameOverState*>(state.get()))
-                    state = std::make_unique<GameOverState>(this);
-                break;
-            default:
-                break;
-        }
-
-        float alpha = accumulator / fixedDt;
-        if (state) {
-            state->Interpolate(alpha);
-            state->Render();
-        }
-    }
-}
-
-
-void CubeGame::StartGame() {
-    // Only start game if in lobby and not already playing.
-    if (!inLobby || currentState == GameState::Playing) {
-        return;
-    }
-    if (hasGameBeenPlayed) {
-        ResetGame();  // Only reset if a game was already played.
-    }
-    if (m_isHost) {
-        // Check that all clients are connected.
-        bool allConnected = true;
-        int memberCount = SteamMatchmaking()->GetNumLobbyMembers(m_currentLobby);
-        for (int i = 0; i < memberCount; i++) {
-            CSteamID member = SteamMatchmaking()->GetLobbyMemberByIndex(m_currentLobby, i);
-            if (member != SteamUser()->GetSteamID()) {
-                auto& connectedClients = networkManager->getConnectedClients();
-                if (connectedClients.count(member) == 0 || !connectedClients.at(member)) {
-                    allConnected = false;
-                    break;
-                }
-            }
-        }
-        if (!allConnected) {
-            return;
-        }
-
-        // Reset and broadcast all player states.
-        for (auto& [id, player] : entityManager->getPlayers()) {
-            ResetPlayerState(player);
-            SteamMatchmaking()->SetLobbyMemberData(m_currentLobby, "ready", "0");
-
-            std::string updateMsg = FormatPlayerUpdate(player);
-            if (!updateMsg.empty()) {
-                networkManager->broadcastMessage(updateMsg);
-            }
-        }
-
-        // Reset local player state.
-        Player& localPlayer = entityManager->getPlayers()[localSteamID];
-        ResetPlayerState(localPlayer);
-        entityManager->getPlayers()[localSteamID] = localPlayer;
+    
+    // Set initial player position slightly above the ground
+    m_player->setPosition(sf::Vector3f(0.0f, 0.5f, -3.0f));
+    
+    // Load player configuration
+    if (!m_player->loadConfig("player_config.ini")) {
+        std::cout << "[WARNING] Failed to load player config, using defaults." << std::endl;
         
-        // Spawn enemies and sync with clients.
-        entityManager->spawnEnemies(enemiesPerWave, entityManager->getPlayers(), localSteamID.ConvertToUint64());
-        networkManager->SyncEnemiesFull();
-
-        // Send game start message.
-        char startBuffer[64];
-        int startBytes = snprintf(startBuffer, sizeof(startBuffer), "S|START");
-        if (startBytes > 0 && static_cast<size_t>(startBytes) < sizeof(startBuffer)) {
-            networkManager->SendGameplayMessage(std::string(startBuffer));
-        }
-
-        // Broadcast enemy spawn messages.
-        uint64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count();
-
-        for (auto& [eid, enemy] : entityManager->getEnemies()) {
-                enemy.spawnDelay = CubeGame::INITIAL_WAVE_DELAY;
-                char buffer[128];
-                int bytes = snprintf(buffer, sizeof(buffer),
-                                     "E|SPAWN|%llu|%.1f|%.1f|%d|%.2f|%d|%llu",
-                                     eid, enemy.x, enemy.y, enemy.health, enemy.spawnDelay,
-                                     static_cast<int>(enemy.type), timestamp);
-                if (bytes > 0 && static_cast<size_t>(bytes) < sizeof(buffer)) {
-                    networkManager->broadcastMessage(std::string(buffer));
-            }
-        }
+        // Setup jump force - this is crucial for jumping to work
+        m_player->getConfig().setJumpForce(10.0f);
+        m_player->getConfig().setGravity(9.8f);
     }
-
-    // Transition to gameplay.
-    currentState = GameState::Playing;
-    inLobby = false;
-    gameStarted = true;
-    hasGameBeenPlayed = true;
-    currentLevel = 1;
-    enemiesPerWave = 5;
-    entityManager->getBullets().clear();
-    ResetViewToDefault();
-}
-
-//--------------------------------------
-// Event Handling & View Management
-//--------------------------------------
-void CubeGame::ProcessEvents(sf::Event& event) {
-    if (event.type == sf::Event::Closed)
-        window.close();
-    if (event.type == sf::Event::Resized) {
-        std::cout << "[DEBUG] Resized window\n";
-        AdjustViewToWindow();
-    }
-}
-
-void CubeGame::ResetViewToDefault() {
-    sf::Vector2u winSize = window.getSize();
-    view.setSize(static_cast<float>(winSize.x), static_cast<float>(winSize.y));
-    view.setCenter(static_cast<float>(winSize.x) / 2.f, static_cast<float>(winSize.y) / 2.f);
-    window.setView(view);
-}
-
-void CubeGame::AdjustViewToWindow() {
-    sf::Vector2u winSize = window.getSize();
-    float windowWidth = static_cast<float>(winSize.x);
-    float windowHeight = static_cast<float>(winSize.y);
-    float targetAspect = view.getSize().x / view.getSize().y;
-    float windowAspect = windowWidth / windowHeight;
-
-    sf::FloatRect viewport(0.f, 0.f, 1.f, 1.f);
-    // Adjust viewport to maintain the aspect ratio.
-    if (windowAspect > targetAspect) {
-        float widthRatio = targetAspect / windowAspect;
-        viewport.width = widthRatio;
-        viewport.left = (1.f - widthRatio) / 2.f;
-    } else {
-        float heightRatio = windowAspect / targetAspect;
-        viewport.height = heightRatio;
-        viewport.top = (1.f - heightRatio) / 2.f;
-    }
-    view.setViewport(viewport);
-    window.setView(view);
-}
-
-//--------------------------------------
-// Lobby and Player State Management
-//--------------------------------------
-
-// Toggles the ready state of the local player and notifies the lobby.
-void CubeGame::ToggleReady() {
-    Player& localPlayer = entityManager->getPlayers()[localSteamID];
-    localPlayer.ready = !localPlayer.ready;
-    SteamMatchmaking()->SetLobbyMemberData(m_currentLobby, "ready", localPlayer.ready ? "1" : "0");
-    entityManager->getPlayers()[localSteamID].ready = localPlayer.ready;
-}
-
-// Returns to the lobby, resetting player and game state for a new session.
-void CubeGame::ReturnToLobby() {
-    inLobby = true;
-    gameStarted = false;
-    currentState = GameState::Lobby;
-
-    // Host resets and broadcasts player states.
-    if (m_isHost) {
-        for (auto& [id, player] : entityManager->getPlayers()) {
-            ResetPlayerState(player);
-            SteamMatchmaking()->SetLobbyMemberData(m_currentLobby, "ready", "0");
-
-            std::string updateMsg = FormatPlayerUpdate(player);
-            if (!updateMsg.empty()) {
-                networkManager->broadcastMessage(updateMsg);
-            }
-        }
-    }
-
-    // Reset local player state.
-    {
-        Player& localPlayer = entityManager->getPlayers()[localSteamID];
-        ResetPlayerState(localPlayer);
-        entityManager->getPlayers()[localSteamID] = localPlayer;
-    }
-
-    // Clear game entities and reset level parameters.
-    entityManager->getEnemies().clear();
-    entityManager->getBullets().clear();
-    currentLevel = 0;
-    enemiesPerWave = 5;
-    ResetViewToDefault();
-}
-
-// Resets the game by clearing entities and resynchronizing player states.
-void CubeGame::ResetGame() {
-    entityManager->getEnemies().clear();
-    entityManager->getBullets().clear();
-
-    // Reset and synchronize each player's state.
-    for (auto& [id, player] : entityManager->getPlayers()) {
-        ResetPlayerState(player);
-        player.steamID = id;  // Preserve Steam ID
-        player.isAlive = true;  // Ensure player is alive after reset
-
-        std::string updateMsg = FormatPlayerUpdate(player);
-        if (!updateMsg.empty()) {
-            if (m_isHost) {
-                networkManager->broadcastMessage(updateMsg);  // Host broadcasts update.
-            } else if (id == localSteamID) {
-                // Client sends its update to the host.
-                const char* hostStr = SteamMatchmaking()->GetLobbyData(m_currentLobby, "host_steam_id");
-                if (hostStr && *hostStr) {
-                    CSteamID hostID(std::stoull(hostStr));
-                    networkManager->sendMessage(hostID, updateMsg);
-                }
-            }
-        }
-    }
-
-    currentLevel = 0;
-    enemiesPerWave = 5;
-    gameStarted = false;
-    nextBulletId = 0;
-    processedBulletMessages.clear();
-    ResetViewToDefault();
-}
-
-// Cleans up lobby state and resets to the main menu.
-void CubeGame::ReturnToMainMenu() {
-    if (inLobby) {
-        SteamMatchmaking()->LeaveLobby(m_currentLobby);
-        inLobby = false;
-        m_currentLobby = k_steamIDNil;
-    }
-    currentState = GameState::MainMenu;
-    gameStarted = false;
-    hasGameBeenPlayed = false;
-    entityManager->getEnemies().clear();
-    entityManager->getBullets().clear();
-    entityManager->getPlayers().clear();
-
-    // Reset the local player's state.
-    Player& localPlayer = entityManager->getPlayers()[localSteamID];
-    ResetPlayerState(localPlayer);
-    entityManager->getPlayers()[localSteamID] = localPlayer;
-
-    currentLevel = 0;
-    enemiesPerWave = 0;
-    lobbyList.clear();
-    ResetViewToDefault();
-}
-
-//--------------------------------------
-// Game Start and Enemy Spawning
-//--------------------------------------
-
-
-//--------------------------------------
-// Player Loading Check
-//--------------------------------------
-// Returns true only if every tracked player's loaded status is true.
-bool CubeGame::GetPlayersAreLoaded() {
-    for (auto& [steamID, isLoaded] : playerLoadedStatus) {
-        if (entityManager->getPlayers().count(steamID) && !playerLoadedStatus[steamID]) {
-            return false;
-        }
-    }
+    
+    // Initialize physics system
+    m_physicsSystem->initialize();
+    m_physicsSystem->setPlayer(m_player.get());
+    
+    // Connect player to physics system
+    m_player->setPhysicsSystem(m_physicsSystem.get());
+    
+    // Create game objects
+    setupGameObjects();
+    
+    m_running = true;
+    
+    std::cout << "[DEBUG] Game initialized successfully" << std::endl;
     return true;
+}
+
+void CubeGame::setupOpenGL()
+{
+    // Set the clear color
+    glClearColor(0.2f, 0.2f, 0.3f, 1.0f);
+    
+    // Enable depth testing
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    
+    // Enable backface culling
+    glEnable(GL_CULL_FACE);
+    
+    // Setup perspective projection
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluPerspective(75.0f, (float)m_window.getSize().x / (float)m_window.getSize().y, 0.1f, 100.0f);
+    
+    glMatrixMode(GL_MODELVIEW);
+}
+
+void CubeGame::run()
+{
+    while (m_running) {
+        float deltaTime = m_clock.restart().asSeconds();
+        
+        // Cap deltaTime to prevent large jumps
+        if (deltaTime > 0.1f) deltaTime = 0.1f;
+        
+        handleEvents();
+        update(deltaTime);
+        render();
+    }
+}
+
+void CubeGame::handleEvents()
+{
+    sf::Event event;
+    while (m_window.pollEvent(event)) {
+        if (event.type == sf::Event::Closed) {
+            m_running = false;
+        }
+        else if (event.type == sf::Event::KeyPressed) {
+            if (event.key.code == sf::Keyboard::Escape) {
+                m_running = false;
+            }
+            // Toggle between first-person and third-person camera modes with the 'V' key
+            else if (event.key.code == sf::Keyboard::V) {
+                PlayerConfig& config = m_player->getConfig();
+                bool currentMode = config.getFirstPersonMode();
+                config.setFirstPersonMode(!currentMode);
+                std::cout << "[INFO] Switched to " 
+                          << (config.getFirstPersonMode() ? "first-person" : "third-person") 
+                          << " camera mode" << std::endl;
+            }
+            // Toggle debug information with F1 key
+            else if (event.key.code == sf::Keyboard::F1) {
+                m_player->toggleDebugMode();
+                m_physicsSystem->setDebugVisualization(m_player->isDebugMode());
+                std::cout << "[INFO] Debug mode " 
+                          << (m_player->isDebugMode() ? "enabled" : "disabled") << std::endl;
+            }
+        }
+        else if (event.type == sf::Event::Resized) {
+            // Adjust viewport on resize
+            glViewport(0, 0, event.size.width, event.size.height);
+            
+            // Update projection matrix for new aspect ratio
+            glMatrixMode(GL_PROJECTION);
+            glLoadIdentity();
+            gluPerspective(75.0f, (float)event.size.width / (float)event.size.height, 0.1f, 100.0f);
+            glMatrixMode(GL_MODELVIEW);
+        }
+    }
+}
+
+void CubeGame::update(float deltaTime)
+{
+    // Update player first so movement inputs are applied
+    m_player->update(deltaTime);
+    
+    // Update physics system after player to handle collisions
+    m_physicsSystem->update(deltaTime);
+    
+    // Update all game objects
+    m_rootObject->update(deltaTime);
+}
+
+void CubeGame::render()
+{
+    // Clear the screen
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    
+    // Reset the modelview matrix
+    glLoadIdentity();
+    
+    // Apply player camera transform
+    m_player->updateCamera();
+    
+    // Draw the world
+    drawWorld();
+    
+    // Render all game objects
+    m_rootObject->render();
+    
+    // Draw the player
+    m_player->render();
+    
+    // Draw physics debug visualization if enabled
+    if (m_player->isDebugMode()) {
+        m_physicsSystem->debugDraw();
+    }
+    
+    // Display the rendered frame
+    m_window.display();
+}
+
+void CubeGame::drawWorld()
+{
+    // Draw floor
+    drawFloor();
+}
+
+void CubeGame::drawFloor()
+{
+    float size = 20.0f; // Size of the floor
+    float tileSize = 1.0f; // Size of each tile
+    
+    glPushMatrix();
+    
+    // Draw a grid of tiles for the floor
+    glBegin(GL_QUADS);
+    
+    for (float x = -size/2; x < size/2; x += tileSize) {
+        for (float z = -size/2; z < size/2; z += tileSize) {
+            // Checkerboard pattern
+            if ((int(x/tileSize) + int(z/tileSize)) % 2 == 0) {
+                glColor3f(0.8f, 0.8f, 0.8f); // Light gray
+            } else {
+                glColor3f(0.3f, 0.3f, 0.3f); // Dark gray
+            }
+            
+            // Draw tile
+            glVertex3f(x, 0, z);
+            glVertex3f(x + tileSize, 0, z);
+            glVertex3f(x + tileSize, 0, z + tileSize);
+            glVertex3f(x, 0, z + tileSize);
+        }
+    }
+    
+    glEnd();
+    
+    glPopMatrix();
+}
+
+std::shared_ptr<GameObject> CubeGame::createCube(const std::string& name, 
+                                               const sf::Vector3f& position, 
+                                               const sf::Vector3f& size, 
+                                               const sf::Color& color)
+{
+    // Create a square object
+    std::shared_ptr<SquareObject> square = std::make_shared<SquareObject>(name, position, size);
+    square->setColor(color);
+    
+    // Add to tracked game objects
+    m_gameObjects.push_back(square);
+    
+    return square;
+}
+
+void CubeGame::setupGameObjects()
+{
+    // Create test cube in front of the player
+    auto testCube = createCube(
+        "TestCube",
+        sf::Vector3f(0.0f, 1.0f, 0.0f),  // Position
+        sf::Vector3f(3.0f, 2.0f, 3.0f),  // Size
+        sf::Color(50, 100, 200));  // Blue color
+        
+    m_rootObject->addChild(testCube);
+    
+    // Add to physics system
+    m_physicsSystem->addCollider(testCube, CollisionLayer::Environment);
+    
+    // Create a platform to jump onto
+    auto platform = createCube(
+        "Platform",
+        sf::Vector3f(4.0f, 0.5f, 3.0f),  // Position
+        sf::Vector3f(4.0f, 1.0f, 4.0f),  // Size
+        sf::Color(200, 50, 50));  // Red color
+        
+    m_rootObject->addChild(platform);
+    m_physicsSystem->addCollider(platform, CollisionLayer::Environment);
+    
+    // Create a trigger zone
+    auto triggerZone = createCube(
+        "TriggerZone",
+        sf::Vector3f(-4.0f, 1.0f, -3.0f),  // Position
+        sf::Vector3f(2.0f, 2.0f, 2.0f),  // Size
+        sf::Color(255, 255, 0, 128));  // Yellow, semi-transparent
+    
+    triggerZone->setColor(sf::Color(255, 255, 0, 128)); // Make it semi-transparent
+    m_rootObject->addChild(triggerZone);
+    m_physicsSystem->addCollider(triggerZone, CollisionLayer::Trigger);
+    
+    std::cout << "[INFO] Created game objects" << std::endl;
 }

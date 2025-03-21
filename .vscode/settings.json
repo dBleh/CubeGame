@@ -70,6 +70,7 @@
         "thread": "cpp",
         "functional": "cpp",
         "unordered_set": "cpp",
-        "array": "cpp"
+        "array": "cpp",
+        "fstream": "cpp"
     }
 }

@@ -5,6 +5,10 @@ set(CMAKE_CXX_STANDARD 17)
 
 set(STEAM_SDK_DIR "C:/Users/dunca/Desktop/sdk")
 set(SFML_DIR "C:/Users/dunca/Desktop/SFML-2.6.1")
+
+# Find OpenGL
+find_package(OpenGL REQUIRED)
+
 # Include directories
 include_directories(
     ${STEAM_SDK_DIR}/public
@@ -14,6 +18,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/src/Networking
     ${CMAKE_SOURCE_DIR}/src/States
     ${CMAKE_SOURCE_DIR}/src/Utils
+    ${OPENGL_INCLUDE_DIR}
 )
 
 # Libraries
@@ -21,29 +26,23 @@ set(STEAM_LIB "${STEAM_SDK_DIR}/redistributable_bin/win64/steam_api64.lib")
 link_directories(${SFML_DIR}/lib)
 
 # Source files
-add_executable(CubeShooter
-    src/main.cpp
-    src/Core/CubeGame.cpp
-    src/Entities/Player.cpp
-    src/Entities/Enemy.cpp
-    src/Entities/Bullet.cpp
-    src/Entities/EntityManager.cpp
-    src/Hud/Hud.cpp
-    src/Networking/SteamManager.cpp
-    src/Networking/NetworkManager.cpp
-    src/States/MainMenuState.cpp
-    src/States/LobbyState.cpp
-    src/States/GameplayState.cpp
-    src/States/GameOverState.cpp
-    src/States/LobbyCreationState.cpp
-    src/States/LobbySearchState.cpp
+file(GLOB_RECURSE SOURCES
+    "src/*.cpp"
 )
-# Link libraries
+
+# Source files
+add_executable(CubeShooter ${SOURCES})
+
+# Link libraries - THIS SECTION WAS UPDATED
 target_link_libraries(CubeShooter
     ${STEAM_LIB}
     sfml-graphics
     sfml-window
     sfml-system
+    sfml-network
+    ${OPENGL_LIBRARIES}
+    opengl32.lib
+    glu32.lib
 )
 
 # MSVC-specific settings
@@ -76,4 +75,3 @@ copy_if_exists("${SFML_BIN_DIR}/sfml-system-2.dll" "$<TARGET_FILE_DIR:CubeShoote
 copy_if_exists("${SFML_BIN_DIR}/sfml-system-d-2.dll" "$<TARGET_FILE_DIR:CubeShooter>")
 copy_if_exists("${SFML_BIN_DIR}/sfml-window-2.dll" "$<TARGET_FILE_DIR:CubeShooter>")
 copy_if_exists("${SFML_BIN_DIR}/sfml-window-d-2.dll" "$<TARGET_FILE_DIR:CubeShooter>")
-# Removed unused SFML audio/network DLLs since they aren't needed
