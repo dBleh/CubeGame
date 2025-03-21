@@ -1,0 +1,154 @@
+src/
+├─ main.cpp
+├─ Core/
+│  ├─ CubeGame.cpp
+│  ├─ CubeGame.h
+│  ├─ GameState.cpp        (NEW - Manages game state data)
+│  ├─ GameState.h          (NEW)
+│  ├─ GameLoop.cpp         (NEW - Separates game loop from main game class)
+│  └─ GameLoop.h           (NEW)
+├─ Entities/
+│  ├─ EntityManager.cpp    (NEW - Manages all entities in the game)
+│  ├─ EntityManager.h      (NEW)
+│  ├─ Objects/
+│  │  ├─ GameObject.cpp
+│  │  ├─ GameObject.h
+│  │  ├─ SquareObject.cpp
+│  │  ├─ SquareObject.h
+│  │  ├─ SyncableObject.cpp  (NEW - Base class for objects that sync over network)
+│  │  └─ SyncableObject.h    (NEW)
+│  ├─ Player/
+│  │  ├─ Player.cpp
+│  │  ├─ Player.h
+│  │  ├─ PlayerConfig.cpp
+│  │  ├─ PlayerConfig.h
+│  │  ├─ RemotePlayer.cpp  (NEW - Represents a player controlled by remote peer)
+│  │  ├─ RemotePlayer.h    (NEW)
+│  │  ├─ PlayerManager.cpp (NEW - Manages all players in the game)
+│  │  ├─ PlayerManager.h   (NEW)
+│  │  └─ player_config.ini
+├─ Physics/
+│  ├─ Physics.h
+│  ├─ PhysicsSystem.cpp
+│  ├─ PhysicsSystem.h
+│  └─ PhysicsUtils.h
+├─ Network/
+│  ├─ NetworkManager.cpp   (NEW - Main network interface)
+│  ├─ NetworkManager.h     (NEW)
+│  ├─ Steam/
+│  │  ├─ SteamNetwork.cpp  (NEW - Steam-specific networking)
+│  │  ├─ SteamNetwork.h    (NEW)
+│  │  ├─ SteamLobby.cpp    (NEW - Steam lobby management)
+│  │  └─ SteamLobby.h      (NEW)
+│  ├─ Packets/
+│  │  ├─ Packet.h          (NEW - Base packet class)
+│  │  ├─ PlayerPacket.h    (NEW - Player state packets)
+│  │  ├─ ObjectPacket.h    (NEW - Object state packets)
+│  │  ├─ GameStatePacket.h (NEW - Game state packets)
+│  │  └─ PacketManager.h   (NEW - Handles packet serialization/deserialization)
+│  └─ Sync/
+│     ├─ SyncManager.cpp   (NEW - Manages entity synchronization)
+│     ├─ SyncManager.h     (NEW)
+│     ├─ EntitySync.cpp    (NEW - Entity-specific synchronization)
+│     └─ EntitySync.h      (NEW)
+├─ Input/
+│  ├─ InputManager.cpp     (NEW - Centralized input handling)
+│  └─ InputManager.h       (NEW)
+├─ UI/
+│  ├─ UIManager.cpp        (NEW - UI for multiplayer elements)
+│  ├─ UIManager.h          (NEW)
+│  ├─ LobbyUI.cpp          (NEW - Lobby interface)
+│  └─ LobbyUI.h            (NEW)
+└─ Utils/
+   ├─ Logger.cpp           (NEW - Improved logging system)
+   ├─ Logger.h             (NEW)
+   ├─ Config.cpp           (NEW - Centralized configuration)
+   └─ Config.h             (NEW)
+To-Do List for Multiplayer Implementation
+1. Core System Updates
+
+ Implement GameState system to track and manage shared game state
+ Refactor CubeGame to support multiple players and network events
+ Create GameLoop class to separate update/render logic from network logic
+ Add session management to handle different game states (menu, lobby, in-game)
+
+2. Network Implementation
+
+ Create NetworkManager to handle all network interactions
+ Implement SteamNetwork adapter from your existing 2D implementation
+ Develop packet system for different message types
+ Create serialization/deserialization system for game objects
+ Implement reliable/unreliable message channels as needed
+ Add network discovery and connection handling
+
+3. Player System Enhancement
+
+ Create RemotePlayer class to represent network-controlled players
+ Implement PlayerManager to track all players (local and remote)
+ Enhance Player class to track ownership and authority
+ Add player spawn/despawn logic for multiplayer sessions
+ Implement player position/rotation synchronization
+ Add player interpolation for smooth movement
+
+4. Entity Synchronization
+
+ Create SyncableObject base class for network-aware objects
+ Implement EntityManager to track and update all game entities
+ Create SyncManager to handle entity state synchronization
+ Add ownership and authority system for game objects
+ Implement state interpolation for remote objects
+
+5. Physics System Updates
+
+ Update PhysicsSystem to handle multiple players
+ Implement client-side prediction and server reconciliation
+ Add lag compensation mechanisms
+ Create collision priority system for multiple players
+
+6. Lobby and Matchmaking
+
+ Implement SteamLobby management
+ Create UI for lobby creation, browsing, and joining
+ Add player readiness system
+ Implement host migration
+ Create match configuration options
+
+7. Input System
+
+ Create InputManager to centralize input handling
+ Add input buffering for network transmission
+ Implement input prediction system
+ Add anti-cheat measures for input validation
+
+8. User Interface
+
+ Create UI for multiplayer-specific features
+ Add in-game player list
+ Implement chat system
+ Add network status indicators
+ Create scoring and game statistics UI
+
+9. Tools and Utilities
+
+ Enhance logging system for network debugging
+ Create configuration system for network settings
+ Add profiling tools for network performance
+ Implement error handling for network issues
+
+10. Testing and Optimization
+
+ Develop test scenarios for multiplayer functionality
+ Create network condition simulators (latency, packet loss)
+ Optimize bandwidth usage
+ Implement fallback mechanisms for poor connections
+
+Implementation Advice
+
+Start with the core networking infrastructure - Begin by porting your Steam p2p implementation to work with this 3D game.
+Implement basic player synchronization - Focus on getting multiple players visible in the same game world before adding complex features.
+Use a deterministic approach where possible - This reduces the amount of data that needs to be synchronized.
+Consider authority models - Decide whether to use server authoritative, client authoritative, or hybrid approaches for different game elements.
+Implement interpolation and prediction - These are crucial for smooth gameplay over variable network conditions.
+Design with scalability in mind - Even though it's p2p, consider how the system would scale with more players.
+Add extensive logging and debugging tools - Multiplayer issues can be difficult to diagnose without proper tools.
+Implement one feature at a time - Test each feature thoroughly before moving to the next one.
