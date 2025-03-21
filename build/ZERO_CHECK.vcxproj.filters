@@ -1,13 +1,13 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <CustomBuild Include="C:\Users\dunca\Desktop\Game\build\CMakeFiles\f3da142ca8279c27febf808a6989e1a1\generate.stamp.rule">
+    <CustomBuild Include="C:\Users\dunca\Desktop\SteamGame\build\CMakeFiles\aa55d1674159b60e62198de2ad5bce23\generate.stamp.rule">
       <Filter>CMake Rules</Filter>
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="CMake Rules">
-      <UniqueIdentifier>{0304F812-BC82-376C-9B0E-FBDA434A3978}</UniqueIdentifier>
+      <UniqueIdentifier>{73B9D142-2654-3E90-9BF3-EA1134D5CB3E}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

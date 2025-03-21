@@ -5,10 +5,13 @@ set(CMAKE_CXX_STANDARD 17)
 
 set(STEAM_SDK_DIR "C:/Users/dunca/Desktop/sdk")
 set(SFML_DIR "C:/SFML/SFML-2.5.1")
+<<<<<<< HEAD
 
 # Find OpenGL
 find_package(OpenGL REQUIRED)
 
+=======
+>>>>>>> 7052a84ba981d40651c3cd5320fa3cb3bd2406b9
 # Include directories
 include_directories(
     ${STEAM_SDK_DIR}/public
@@ -26,8 +29,28 @@ set(STEAM_LIB "${STEAM_SDK_DIR}/redistributable_bin/win64/steam_api64.lib")
 link_directories(${SFML_DIR}/lib)
 
 # Source files
+<<<<<<< HEAD
 file(GLOB_RECURSE SOURCES
     "src/*.cpp"
+=======
+add_executable(CubeShooter
+    src/main.cpp
+    src/Game.cpp                       # Assuming CubeGame.cpp is renamed to Game.cpp per your new structure
+    src/entities/Player.cpp            # Matches src/entities/Player.h
+    #src/entities/Enemy.cpp             # Matches src/entities/Enemy.h
+    #src/entities/Bullet.cpp            # Not explicitly listed, assuming it goes in src/entities/
+    #src/entities/EntityManager.cpp     # Not explicitly listed, assuming it goes in src/entities/
+    src/Hud/Hud.cpp                    # Matches src/Hud/Hud.h
+    #src/network/SteamManager.cpp       # Moved to src/network/ from src/Networking/
+    src/network/NetworkManager.cpp     # Matches src/network/NetworkManager.h
+    src/states/MainMenuState.cpp       # Matches src/states/MainMenuState.h
+    src/states/LobbyState.cpp          # Not listed but assumed in src/states/
+    #src/states/GameplayState.cpp       # Matches src/states/PlayingState.h (assuming renamed)
+    #src/states/GameOverState.cpp       # Matches src/states/GameOverState.h
+    src/states/LobbyCreationState.cpp  # Not listed but assumed in src/states/
+    src/states/LobbySearchState.cpp    # Not listed but assumed in src/states/
+    src/utils/MessageHandler.cpp
+>>>>>>> 7052a84ba981d40651c3cd5320fa3cb3bd2406b9
 )
 
 # Display the sources found (optional, for debugging purposes)

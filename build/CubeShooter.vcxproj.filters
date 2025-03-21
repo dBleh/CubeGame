@@ -1,19 +1,50 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+<<<<<<< HEAD
     <ClCompile Include="C:\Users\dunca\Desktop\Game\src\Core\CubeGame.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="C:\Users\dunca\Desktop\Game\src\main.cpp">
+=======
+    <ClCompile Include="C:\Users\dunca\Desktop\SteamGame\src\main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\dunca\Desktop\SteamGame\src\Game.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\dunca\Desktop\SteamGame\src\entities\Player.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\dunca\Desktop\SteamGame\src\hud\Hud.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\dunca\Desktop\SteamGame\src\network\NetworkManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\dunca\Desktop\SteamGame\src\states\MainMenuState.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\dunca\Desktop\SteamGame\src\states\LobbyState.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\dunca\Desktop\SteamGame\src\states\LobbyCreationState.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\dunca\Desktop\SteamGame\src\states\LobbySearchState.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\dunca\Desktop\SteamGame\src\utils\MessageHandler.cpp">
+>>>>>>> 7052a84ba981d40651c3cd5320fa3cb3bd2406b9
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="C:\Users\dunca\Desktop\Game\CMakeLists.txt" />
+    <CustomBuild Include="C:\Users\dunca\Desktop\SteamGame\CMakeLists.txt" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Source Files">
-      <UniqueIdentifier>{8F6B9176-DB9E-35CD-9853-8A6CF84C59E0}</UniqueIdentifier>
+      <UniqueIdentifier>{B73A276C-4A4E-399E-B96F-258C0F979358}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>
