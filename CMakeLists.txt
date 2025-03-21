@@ -4,7 +4,11 @@ project(CubeShooter)
 set(CMAKE_CXX_STANDARD 17)
 
 set(STEAM_SDK_DIR "C:/Users/dunca/Desktop/sdk")
-set(SFML_DIR "C:/Users/dunca/Desktop/SFML-2.6.1")
+set(SFML_DIR "C:/SFML/SFML-2.5.1")
+
+# Find OpenGL
+find_package(OpenGL REQUIRED)
+
 # Include directories
 include_directories(
     ${STEAM_SDK_DIR}/public
@@ -14,6 +18,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/src/Networking
     ${CMAKE_SOURCE_DIR}/src/States
     ${CMAKE_SOURCE_DIR}/src/Utils
+    ${OPENGL_INCLUDE_DIR}
 )
 
 # Libraries
@@ -21,30 +26,32 @@ set(STEAM_LIB "${STEAM_SDK_DIR}/redistributable_bin/win64/steam_api64.lib")
 link_directories(${SFML_DIR}/lib)
 
 # Source files
-add_executable(CubeShooter
-    src/main.cpp
-    src/Core/CubeGame.cpp
-    src/Entities/Player.cpp
-    src/Entities/Enemy.cpp
-    src/Entities/Bullet.cpp
-    src/Entities/EntityManager.cpp
-    src/Hud/Hud.cpp
-    src/Networking/SteamManager.cpp
-    src/Networking/NetworkManager.cpp
-    src/States/MainMenuState.cpp
-    src/States/LobbyState.cpp
-    src/States/GameplayState.cpp
-    src/States/GameOverState.cpp
-    src/States/LobbyCreationState.cpp
-    src/States/LobbySearchState.cpp
+file(GLOB_RECURSE SOURCES
+    "src/*.cpp"
 )
+
+# Display the sources found (optional, for debugging purposes)
+# message(STATUS "Found the following source files:")
+# foreach(SOURCE ${SOURCES})
+#     message(STATUS "  ${SOURCE}")
+# endforeach()
+
+# Source files
+add_executable(CubeShooter ${SOURCES})
+
 # Link libraries
 target_link_libraries(CubeShooter
     ${STEAM_LIB}
     sfml-graphics
     sfml-window
     sfml-system
+    ${OPENGL_LIBRARIES}
 )
+
+# On Windows, we need to explicitly link against glu32 and opengl32
+if(WIN32)
+    target_link_libraries(CubeShooter opengl32 glu32)
+endif()
 
 # MSVC-specific settings
 if(MSVC)
