@@ -32,6 +32,36 @@ public:
         Crouching
     };
 
+    // Structure to hold body proportions for character model
+    struct BodyProportions {
+        // Overall size
+        float scale = 1.0f;
+        
+        // Basic dimensions
+        float headRadius = 0.4f;
+        float bodyWidth = 0.5f;
+        float limbWidth = 0.25f;
+        
+        // Heights and lengths
+        float headHeight = 0.8f;    // Height offset for head from top of torso
+        float torsoLength = 2.0f;
+        float shoulderWidth = 1.6f;
+        float hipWidth = 0.8f;      // Distance between hips
+        
+        // Arm dimensions
+        float shoulderHeight = 0.9f; // Height position on torso (0-1)
+        float upperArmLength = 1.5f;
+        float forearmLength = 1.4f;
+        
+        // Leg dimensions
+        float thighLength = 1.8f;
+        float calfLength = 1.7f;
+        
+        // Position adjustments
+        float shoulderOffsetZ = 0.0f; // Forward/backward offset of shoulders
+        float hipOffsetZ = 0.0f;      // Forward/backward offset of hips
+    };
+
     // Constructors/destructors
     Player();
     ~Player();
@@ -60,6 +90,7 @@ public:
     State getState() const { return m_state; }
     bool isGrounded() const { return m_isGrounded; }
     void setGrounded(bool grounded) { m_isGrounded = grounded; }
+    float getGroundedTimer() const { return m_groundedTimer; }
     
     void setGroundedTimer(float time) { 
         m_groundedTimer = time; 
@@ -90,7 +121,10 @@ public:
     // Debug
     void toggleDebugMode() { m_debugMode = !m_debugMode; }
     bool isDebugMode() const { return m_debugMode; }
-    
+
+    // Body proportions setter
+    void setBodyProportion(const std::string& propName, float value);
+
 private:
     // Window reference
     sf::Window* m_window;
@@ -122,7 +156,7 @@ private:
     bool m_jump;
     bool m_crouch;
     bool m_sprint;
-    
+
     // Camera state
     sf::Vector2i m_lastMousePos;
     bool m_firstMouseMove;
@@ -130,7 +164,13 @@ private:
     // Debug
     bool m_debugMode;
     
+    // Model parameters
+    BodyProportions m_bodyProps;
+    float m_totalLegLength;       // Computed as thighLength + calfLength
+    int m_segments;               // Level of detail for rendering
+    
     // Private methods
+    void initBodyProportions();
     void handleKeyboardInput();
     void handleMouseInput();
     void updateMouseLook();
@@ -138,6 +178,10 @@ private:
     
     // Drawing methods
     void drawPlayerModel();
+    void drawHead();
+    void drawTorso();
+    void drawArm(bool isLeft, float armSwing, float elbowBend);
+    void drawLeg(bool isLeft, float legSwing, float kneeBend);
     void drawDebugInfo();
     
     // Sound methods

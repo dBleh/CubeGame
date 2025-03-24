@@ -376,19 +376,22 @@ void PhysicsSystem::resolveCollisions()
         
         // For top collisions (landing on an object)
         if (info.isTop) {
-            // Set Y position to rest on surface
-            float surfaceY = collision.objectB->getPosition().y + 
-                           (dynamic_cast<SquareObject*>(collision.objectB.get())->getSize().y / 2.0f);
-            
-            playerPos.y = surfaceY + m_player->getConfig().getPlayerRadius() + 0.01f;
-            
-            // Zero out vertical velocity if falling
-            if (playerVel.y < 0) {
-                playerVel.y = 0.0f;
+            // Only adjust position and velocity if the player isn't actively jumping
+            if (playerVel.y <= 0) {
+                SquareObject* squareObj = dynamic_cast<SquareObject*>(collision.objectB.get());
+                if (squareObj) {
+                    float surfaceY = collision.objectB->getPosition().y + (squareObj->getSize().y / 2.0f);
+                    playerPos.y = surfaceY + m_player->getConfig().getPlayerRadius() + 0.01f;
+                }
+                
+                // Zero out vertical velocity if falling
+                if (playerVel.y < 0) {
+                    playerVel.y = 0.0f;
+                }
+                
+                // Mark as grounded
+                isGrounded = true;
             }
-            
-            // Mark as grounded
-            isGrounded = true;
         }
         // For bottom collisions (hitting ceiling)
         else if (info.collisionNormal.y < -0.7f) {
@@ -446,6 +449,18 @@ void PhysicsSystem::updatePlayerGroundedState()
     if (m_player->getVelocity().y > 0) {
         m_player->setGrounded(false);
         return;
+    }
+    
+    // If player was already set as grounded during collision resolution, maintain that state
+    // with a short timer to prevent flicker
+    if (m_player->isGrounded()) {
+        // If we're on a cube (determined during collision resolution), give the player
+        // a short "grounded memory" so the state doesn't flicker between frames
+        if (!m_collisions.empty()) {
+            // Set a short grounded timer to maintain state between frames
+            m_player->setGroundedTimer(0.1f);  // 100ms of "grounded memory"
+            return;
+        }
     }
     
     // Get player position

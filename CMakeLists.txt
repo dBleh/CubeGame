@@ -75,3 +75,9 @@ copy_if_exists("${SFML_BIN_DIR}/sfml-system-2.dll" "$<TARGET_FILE_DIR:CubeShoote
 copy_if_exists("${SFML_BIN_DIR}/sfml-system-d-2.dll" "$<TARGET_FILE_DIR:CubeShooter>")
 copy_if_exists("${SFML_BIN_DIR}/sfml-window-2.dll" "$<TARGET_FILE_DIR:CubeShooter>")
 copy_if_exists("${SFML_BIN_DIR}/sfml-window-d-2.dll" "$<TARGET_FILE_DIR:CubeShooter>")
+
+# Copy all configuration files
+file(GLOB CONFIG_FILES "${CMAKE_SOURCE_DIR}/src/Entities/Player/*.ini")
+foreach(CONFIG_FILE ${CONFIG_FILES})
+    copy_if_exists(${CONFIG_FILE} "$<TARGET_FILE_DIR:CubeShooter>")
+endforeach()

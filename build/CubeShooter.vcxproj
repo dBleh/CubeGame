@@ -118,7 +118,7 @@
       <ProxyFileName>%(Filename)_p.c</ProxyFileName>
     </Midl>
     <PostBuildEvent>
-      <Message>								</Message>
+      <Message>									</Message>
       <Command>setlocal
 "C:\Program Files\CMake\bin\cmake.exe" -E copy_if_different C:/Users/dunca/Desktop/sdk/redistributable_bin/win64/steam_api64.dll C:/Users/dunca/Desktop/Projects/CubeGame/build/Debug
 if %errorlevel% neq 0 goto :cmEnd
@@ -199,6 +199,15 @@ endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
 :cmErrorLevel
 exit /b %1
 :cmDone
+if %errorlevel% neq 0 goto :VCEnd
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -E copy_if_different C:/Users/dunca/Desktop/Projects/CubeGame/src/Entities/Player/player_config.ini C:/Users/dunca/Desktop/Projects/CubeGame/build/Debug
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
 if %errorlevel% neq 0 goto :VCEnd</Command>
     </PostBuildEvent>
     <Link>
@@ -250,7 +259,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <ProxyFileName>%(Filename)_p.c</ProxyFileName>
     </Midl>
     <PostBuildEvent>
-      <Message>								</Message>
+      <Message>									</Message>
       <Command>setlocal
 "C:\Program Files\CMake\bin\cmake.exe" -E copy_if_different C:/Users/dunca/Desktop/sdk/redistributable_bin/win64/steam_api64.dll C:/Users/dunca/Desktop/Projects/CubeGame/build/Release
 if %errorlevel% neq 0 goto :cmEnd
@@ -331,6 +340,15 @@ endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
 :cmErrorLevel
 exit /b %1
 :cmDone
+if %errorlevel% neq 0 goto :VCEnd
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -E copy_if_different C:/Users/dunca/Desktop/Projects/CubeGame/src/Entities/Player/player_config.ini C:/Users/dunca/Desktop/Projects/CubeGame/build/Release
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
 if %errorlevel% neq 0 goto :VCEnd</Command>
     </PostBuildEvent>
     <Link>
@@ -382,7 +400,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <ProxyFileName>%(Filename)_p.c</ProxyFileName>
     </Midl>
     <PostBuildEvent>
-      <Message>								</Message>
+      <Message>									</Message>
       <Command>setlocal
 "C:\Program Files\CMake\bin\cmake.exe" -E copy_if_different C:/Users/dunca/Desktop/sdk/redistributable_bin/win64/steam_api64.dll C:/Users/dunca/Desktop/Projects/CubeGame/build/MinSizeRel
 if %errorlevel% neq 0 goto :cmEnd
@@ -463,6 +481,15 @@ endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
 :cmErrorLevel
 exit /b %1
 :cmDone
+if %errorlevel% neq 0 goto :VCEnd
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -E copy_if_different C:/Users/dunca/Desktop/Projects/CubeGame/src/Entities/Player/player_config.ini C:/Users/dunca/Desktop/Projects/CubeGame/build/MinSizeRel
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
 if %errorlevel% neq 0 goto :VCEnd</Command>
     </PostBuildEvent>
     <Link>
@@ -513,7 +540,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <ProxyFileName>%(Filename)_p.c</ProxyFileName>
     </Midl>
     <PostBuildEvent>
-      <Message>								</Message>
+      <Message>									</Message>
       <Command>setlocal
 "C:\Program Files\CMake\bin\cmake.exe" -E copy_if_different C:/Users/dunca/Desktop/sdk/redistributable_bin/win64/steam_api64.dll C:/Users/dunca/Desktop/Projects/CubeGame/build/RelWithDebInfo
 if %errorlevel% neq 0 goto :cmEnd
@@ -588,6 +615,15 @@ exit /b %1
 if %errorlevel% neq 0 goto :VCEnd
 setlocal
 "C:\Program Files\CMake\bin\cmake.exe" -E copy_if_different C:/Users/dunca/Desktop/SFML-2.6.1/bin/sfml-window-d-2.dll C:/Users/dunca/Desktop/Projects/CubeGame/build/RelWithDebInfo
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -E copy_if_different C:/Users/dunca/Desktop/Projects/CubeGame/src/Entities/Player/player_config.ini C:/Users/dunca/Desktop/Projects/CubeGame/build/RelWithDebInfo
 if %errorlevel% neq 0 goto :cmEnd
 :cmEnd
 endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone

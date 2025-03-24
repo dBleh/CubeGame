@@ -55,6 +55,7 @@ bool CubeGame::initialize()
     
     // Load player configuration
     if (!m_player->loadConfig("player_config.ini")) {
+
         std::cout << "[WARNING] Failed to load player config, using defaults." << std::endl;
         
         // Setup jump force - this is crucial for jumping to work
